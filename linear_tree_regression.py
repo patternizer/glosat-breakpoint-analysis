@@ -75,20 +75,21 @@ clf.fit(X, y)
 
 min_samples_leaf = 100
 max_bins = 24
-max_depth = 12 # in range [1,20]
+max_depth = 6 # in range [1,20]
 max_r_over_rmax = 0.995 
+use_slope = False
 
-fontsize = 16
+fontsize = 12
 plot_cusum = False
 plot_correlation = True
 
-stationcode = '037401' # HadCET
+#stationcode = '037401' # HadCET
 #stationcode = '103810'     # Berlin-Dahlem (breakpoint: 1908)
-#stationcode = '685880'     # Durban/Louis Botha (breakpoint: 1939)
+stationcode = '685880'     # Durban/Louis Botha (breakpoint: 1939)
 
-documented_change = np.nan
+#documented_change = np.nan
 #documented_change = 1908
-#documented_change = 1939 
+documented_change = 1939 
 
 filename = 'DATA/cusum_' + stationcode + '_obs.csv'
 
@@ -120,7 +121,7 @@ def linear_regression_ols(x,y):
     # regr = TheilSenRegressor(random_state=42)
     # regr = RANSACRegressor(random_state=42)
     
-    X = x.values.reshape(len(x),1)
+    X = x.reshape(len(x),1)
     t = np.linspace(X.min(),X.max(),len(X)) # dummy var spanning [xmin,xmax]        
     regr.fit(X, y)
     ypred = regr.predict(t.reshape(-1, 1))
@@ -145,10 +146,9 @@ df = pd.read_csv(filename, index_col=0)
 x = df.index.values
 y = df.cu.values
 mask = np.isfinite(y)
-nx = len(df)
-x = np.arange(nx) / nx
-x = x[mask].reshape(-1, 1)
-y = y[mask].reshape(-1, 1)
+x_obs = np.arange( len(y) ) / len(y)
+x_obs = x_obs[mask].reshape(-1, 1)
+y_obs = y[mask].reshape(-1, 1)	
 
 #------------------------------------------------------------------------------
 # FIT: linear tree regression (LTR) model
@@ -169,17 +169,16 @@ for depth in range(1,max_depth+1):
         min_samples_leaf = min_samples_leaf,
         max_bins = max_bins,
         max_depth = depth
-    ).fit(x, y)            
-    y_fit = lt.predict(x)    
-       
-    X = y_fit.reshape(-1,1)
-    Y = y
-    mask_ols = np.isfinite(X) & np.isfinite(Y)
-    corrcoef = scipy.stats.pearsonr(X[mask_ols], Y[mask_ols])[0]
-    R2adj = adjusted_r_squared(X,Y)
+    ).fit(x_obs, y_obs)            
+    y_fit = lt.predict(x_obs)    
+    Y = y_obs
+    Z = y_fit.reshape(-1,1)
+    mask_ols = np.isfinite(Y) & np.isfinite(Z)
+    corrcoef = scipy.stats.pearsonr(Y[mask_ols], Z[mask_ols])[0]
+    R2adj = adjusted_r_squared(Y,Z)
     r.append(corrcoef)
     r2adj.append(R2adj)    
-
+               
 r_diff = [0.0] + list(np.diff(r))
 max_depth_optimum = np.arange(1,max_depth+1)[np.array(r/np.max(r)) > max_r_over_rmax][1] - 1
 
@@ -228,51 +227,100 @@ for depth in range(1,max_depth+1):
         min_samples_leaf = min_samples_leaf,
         max_bins = max_bins,
         max_depth = depth        
-    ).fit(x, y)    
-
+    ).fit(x_obs, y_obs)    
+    y_fit = lt.predict(x_obs)           
+    y_fit_diff = [0.0] + list(np.diff(y_fit))
+    
     # FIT: decision tree regressor
 
     # dr = DecisionTreeRegressor(   
     #    max_depth = depth
     # ).fit(x, y)
     # x_fit = dr.predict(x)
+ 
+    # BREAKPOINT: detection
+        
+    breakpoints_all = x[mask][ np.abs(y_fit_diff) >= np.abs(np.nanmean(y_fit_diff)) + 1.0*np.abs(np.nanstd(y_fit_diff)) ][0:]
+    breakpoints_idx = np.arange(len(x[mask]))[ np.abs(y_fit_diff) >= np.abs(np.nanmean(y_fit_diff)) + 1.0*np.abs(np.nanstd(y_fit_diff)) ][0:]        
 
-    y_fit = lt.predict(x)            
-    y_fit_diff = [0.0] + list(np.diff(y_fit))
+    if use_slope == True:
         
-    breakpoints = df.index[mask][ np.abs(y_fit_diff) >= np.abs(np.nanmean(y_fit_diff)) + 6.0*np.abs(np.nanstd(y_fit_diff)) ][0:]
+        slopes = []
+        for j in range(len(breakpoints_all)+1):
+            if j == 0:            
+                xj = x[mask][ 0:breakpoints_idx[0] ]
+                yj = y[mask][ 0:breakpoints_idx[0] ]
+            elif j == len(breakpoints_all):                   
+                xj = x[mask][ breakpoints_idx[-1]: ] 
+                yj = y[mask][ breakpoints_idx[-1]: ]
+            elif (j>0) & (j<(len(breakpoints_all))):               
+                xj = x[mask][ breakpoints_idx[j-1]:breakpoints_idx[j] ]
+                yj = y[mask][ breakpoints_idx[j-1]:breakpoints_idx[j] ]
+            t, ypred, slope, intercept = linear_regression_ols(xj,yj)
+            slopes.append(slope)     
+        dslopes = np.diff(slopes)        
+        breakpoints = breakpoints_all[ (np.abs(dslopes) > 0.5) ]
+
+    else:
         
+        breakpoints = breakpoints_all
+            
     plt.subplot(nr, nc, depth)
-    plt.scatter(df.index[mask], y, s=3, c='blue', zorder=3)
-    plt.scatter(df.index[mask], y_fit, s=3, c='darkorange', zorder=4)
-    for i in range(len(breakpoints)):
-        plt.axvline(x=breakpoints[i], ls='--', lw=2, color='teal', alpha=0.25, zorder=1)        
-    plt.fill_between(df.index[mask], 
+    plt.axvline(x=documented_change, ls='--', lw=2, color='black', label='Documented change: ' + str(documented_change) )     
+    plt.scatter(x[mask], y[mask], s=3, c='blue', zorder=3, label='CUSUM')
+    plt.scatter(x[mask], y_fit, s=3, c='red', zorder=4, label='LTR')
+#    for i in range(len(breakpoints)):
+#        plt.axvline(x=breakpoints[i], ls='--', lw=2, color='teal', alpha=0.25, zorder=1)        
+    plt.fill_between(x[mask], 
              np.abs(np.nanmean(y_fit_diff)) + 6.0*np.abs(np.nanstd(y_fit_diff)), 
              np.abs(np.nanmean(y_fit_diff)) - 6.0*np.abs(np.nanstd(y_fit_diff)), 
              ls='-', lw=1, color='teal', alpha=0.1, zorder=1)
-    plt.plot(df.index[mask], [np.nan] + list(np.diff(y_fit)), ls='-', lw=2, color='teal', zorder=2)
-    plt.axvline(x=documented_change, ls='--', lw=2, color='black')
+    plt.plot(x[mask], [np.nan] + list(np.diff(y_fit)), ls='-', lw=2, color='teal', zorder=2,  label=r'$\delta$LTR: ' + r'$\mu\pm6\sigma$')
 
     ylimits = plt.ylim()    
 
     if depth == max_depth_optimum:
-
+        
         df_breakpoints = pd.DataFrame({'breakpoint':breakpoints})
         df_breakpoints.to_csv(stationcode + '-' + 'breakpoints.csv')
 
-        plt.title('depth ' + str(depth) + r' (BEST): $\rho$=' + str(np.round(r[depth-1],3)), color='darkorange', fontsize=12)   
-        
+        plt.title('depth ' + str(depth) + r' (BEST): $\rho$=' + str(np.round(r[depth-1],3)), color='red', fontsize=12)           
         for j in range(len(breakpoints)):        
             if (j%2 == 0) & (j<len(breakpoints)-1):
-                plt.fill_betweenx(ylimits, breakpoints[j], breakpoints[j+1], facecolor='cyan', alpha=0.5, zorder=0)
-            elif (j%2 != 0) & (j<len(breakpoints)-1):
-                plt.fill_betweenx(ylimits, breakpoints[j], breakpoints[j+1], facecolor='yellow', alpha=0.5, zorder=0)        
+                plt.fill_betweenx(ylimits, breakpoints[j], breakpoints[j+1], facecolor='gold', alpha=0.5, zorder=0)
+            elif (j%2 != 0) & (j<len(breakpoints)-1):        
+                plt.fill_betweenx(ylimits, breakpoints[j], breakpoints[j+1], facecolor='cyan', alpha=0.5, zorder=0)         
+            if j == 0:              
+                plt.fill_betweenx(ylimits, x[mask][0], breakpoints[j], facecolor='cyan', alpha=0.5, zorder=0)         
+            if (j == len(breakpoints)-1) & (j%2 == 0):              
+                plt.fill_betweenx(ylimits, breakpoints[j], x[-1], facecolor='gold', alpha=0.5, zorder=0)         
+            if (j == len(breakpoints)-1) & (j%2 != 0):              
+                plt.fill_betweenx(ylimits, breakpoints[j], x[-1], facecolor='cyan', alpha=0.5, zorder=0)   
+
+        plt.title( stationcode + ': depth=' + str(depth) + r' (BEST): $\rho$=' + str(np.round(r[depth-1],3)), color='red', fontsize=fontsize)           
 
     else:
-        plt.title('depth ' + str(depth) + r': $\rho$=' + str(np.round(r[depth-1],3)))    
+        plt.title( stationcode + ': depth=' + str(depth) + r' : $\rho$=' + str(np.round(r[depth-1],3)), color='black', fontsize=fontsize)           
+        for j in range(len(breakpoints)):        
+            if (j%2 == 0) & (j<len(breakpoints)-1):
+                plt.fill_betweenx(ylimits, breakpoints[j], breakpoints[j+1], facecolor='lightgrey', alpha=0.5, zorder=0)
+            elif (j%2 != 0) & (j<len(breakpoints)-1):        
+                plt.fill_betweenx(ylimits, breakpoints[j], breakpoints[j+1], facecolor='grey', alpha=0.5, zorder=0)         
+            if j == 0:              
+                plt.fill_betweenx(ylimits, x[mask][0], breakpoints[j], facecolor='grey', alpha=0.5, zorder=0)         
+            if (j == len(breakpoints)-1) & (j%2 == 0):              
+                plt.fill_betweenx(ylimits, breakpoints[j], x[-1], facecolor='lightgrey', alpha=0.5, zorder=0)         
+            if (j == len(breakpoints)-1) & (j%2 != 0):              
+                plt.fill_betweenx(ylimits, breakpoints[j], x[-1], facecolor='grey', alpha=0.5, zorder=0)           
                
-plt.suptitle(stationcode, fontsize=fontsize)
+
+    plt.legend(loc='lower right', ncol=2, markerscale=3, facecolor='lightgrey', framealpha=0.5, fontsize=10)       
+    plt.tick_params(labelsize=fontsize)    
+    plt.xlabel('Year', fontsize=fontsize)
+    plt.ylabel('CUSUM', fontsize=fontsize)
+    fig.tight_layout()
+
+#plt.suptitle(stationcode, fontsize=fontsize)
 fig.tight_layout()
 plt.savefig(figstr, dpi=300)
 plt.close('all')    
