@@ -73,23 +73,24 @@ clf.fit(X, y)
 # SETTINGS
 #-----------------------------------------------------------------------------
 
-min_samples_leaf = 100
-max_bins = 24
+min_samples_leaf = 24
+max_bins = 60
 max_depth = 6 # in range [1,20]
-max_r_over_rmax = 0.995 
+max_r_over_rmax = 0.999 
 use_slope = False
 
 fontsize = 12
 plot_cusum = False
 plot_correlation = True
 
-#stationcode = '037401' # HadCET
-#stationcode = '103810'     # Berlin-Dahlem (breakpoint: 1908)
-stationcode = '685880'     # Durban/Louis Botha (breakpoint: 1939)
+#stationcode = '745000'      # Lincoln
+#stationcode = '037401'     # HadCET
+stationcode = '103810'     # Berlin-Dahlem (breakpoint: 1908)
+#stationcode = '685880'     # Durban/Louis Botha (breakpoint: 1939)
 
 #documented_change = np.nan
-#documented_change = 1908
-documented_change = 1939 
+documented_change = 1908
+#documented_change = 1939 
 
 filename = 'DATA/cusum_' + stationcode + '_obs.csv'
 
@@ -180,11 +181,12 @@ for depth in range(1,max_depth+1):
     r2adj.append(R2adj)    
                
 r_diff = [0.0] + list(np.diff(r))
-max_depth_optimum = np.arange(1,max_depth+1)[np.array(r/np.max(r)) > max_r_over_rmax][1] - 1
+max_depth_optimum = np.arange(1,max_depth+1)[np.array(r/np.max(r)) >= max_r_over_rmax][0] - 1
+#max_depth_optimum = np.arange(1,max_depth+1)[np.array(r/np.max(r)) >= max_r_over_rmax][1] - 1
 
 # GRAPHVIZ: plot regression tree model (full) and to depth=3
             
-# lt.plot_model(max_depth=3max_depth_optimum)
+# lt.plot_model(max_depth=max_depth_optimum)
 
 if plot_correlation == True:
         
@@ -240,8 +242,8 @@ for depth in range(1,max_depth+1):
  
     # BREAKPOINT: detection
         
-    breakpoints_all = x[mask][ np.abs(y_fit_diff) >= np.abs(np.nanmean(y_fit_diff)) + 1.0*np.abs(np.nanstd(y_fit_diff)) ][0:]
-    breakpoints_idx = np.arange(len(x[mask]))[ np.abs(y_fit_diff) >= np.abs(np.nanmean(y_fit_diff)) + 1.0*np.abs(np.nanstd(y_fit_diff)) ][0:]        
+    breakpoints_all = x[mask][ np.abs(y_fit_diff) >= np.abs(np.nanmean(y_fit_diff)) + 6.0*np.abs(np.nanstd(y_fit_diff)) ][0:]
+    breakpoints_idx = np.arange(len(x[mask]))[ np.abs(y_fit_diff) >= np.abs(np.nanmean(y_fit_diff)) + 6.0*np.abs(np.nanstd(y_fit_diff)) ][0:]        
 
     if use_slope == True:
         

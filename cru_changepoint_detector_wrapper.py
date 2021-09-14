@@ -26,12 +26,16 @@ import cru_changepoint_detector as cru # CRU changepoint detector
 #-----------------------------------------------------------------------------
 
 fontsize = 16
-#stationcode = '037401'     # HadCET
+
+#stationcode = '745000'      # Lincoln
+stationcode = '037401'     # HadCET
 #stationcode = '103810'     # Berlin-Dahlem (breakpoint: 1908)
-stationcode = '685880'     # Durban/Louis Botha (breakpoint: 1939)
-#documented_change = np.nan
+#stationcode = '685880'     # Durban/Louis Botha (breakpoint: 1939)
+
+documented_change = np.nan
 #documented_change = 1908
-documented_change = 1939 
+#documented_change = 1939 
+
 file_cusum = 'DATA/cusum_' + stationcode + '_obs.csv'
 file_breakpoints = stationcode + '-' + 'breakpoints.csv'    
 figstr = stationcode + '-' + 'cusum-curve-linear-tree.png' 
