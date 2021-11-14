@@ -2,6 +2,7 @@
 ![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/103810-cusum-curve-linear-tree-loop.png)
 ![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/685880-cusum-curve-linear-tree-loop.png)
 
+
 # glosat-breakpoint-analysis
 
 Python algorithm to calculate breakpoints in local expectation Kriging output CUSUM timeseries using linear tree regression and slope change detection. Part of ongoing work on land surface air temperature station homogensiation as part of the project [Glosat](www.glosat.org) 
