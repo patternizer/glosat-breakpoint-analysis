@@ -5,8 +5,8 @@
 # PROGRAM: cru_changepoint_detector_static.py
 #------------------------------------------------------------------------------
 #
-# Version 0.1
-# 14 Sepyember, 2021
+# Version 0.2
+# 2 November, 2021
 # Michael Taylor
 # https://patternizer.github.io
 # patternizer AT gmail DOT com
@@ -15,32 +15,23 @@
 
 # Numerics and dataframe libraries:
 import numpy as np
-import numpy.ma as ma
-import scipy
-import scipy.stats as stats    
 import pandas as pd
-import xarray as xr
 import pickle
 
 # Datetime libraries:
-from datetime import datetime
-import nc_time_axis
-import cftime
-from cftime import num2date, DatetimeNoLeap
-
+#from datetime import datetime
+#import nc_time_axis
+#import cftime
+#from cftime import num2date, DatetimeNoLeap
 
 # Plotting libraries:
 import matplotlib
 #matplotlib.use('agg')
 import matplotlib.pyplot as plt; plt.close('all')
-import matplotlib.colors as mcolors
-from matplotlib import cm
-from matplotlib.cm import ScalarMappable
 from matplotlib import rcParams
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 matplotlib.rcParams['text.usetex'] = False
-import cmocean as cmo
 
 # Silence library version notifications
 import warnings
@@ -76,19 +67,11 @@ plt.rc('savefig',facecolor='black')
 
 # Calculate current time
 
-now = datetime.now()
-currentmn = str(now.month)
-if now.day == 1:
-    currentdy = str(cal.monthrange(now.year,now.month-1)[1])
-    currentmn = str(now.month-1)
-else:
-    currentdy = str(now.day-1)
-if int(currentdy) < 10:
-    currentdy = '0' + currentdy    
-currentyr = str(now.year)
-if int(currentmn) < 10:
-    currentmn = '0' + currentmn
-titletime = str(currentdy) + '/' + currentmn + '/' + currentyr
+#now = datetime.now()
+#currentdy = str(now.day).zfill(2)
+#currentmn = str(now.month).zfill(2)
+#currentyr = str(now.year)
+#titletime = str(currentdy) + '/' + currentmn + '/' + currentyr
 
 #-----------------------------------------------------------------------------
 # SETTINGS
@@ -96,12 +79,11 @@ titletime = str(currentdy) + '/' + currentmn + '/' + currentyr
 
 fontsize = 16
 
-stationcode = '010010'
-
-# Seasonal mean parameters
-
-nsmooth = 12                  # 1yr MA monthly
-nfft = 10                     # decadal smoothing
+#stationcode = '745000'     # Lincoln
+#stationcode = '037401'     # HadCET
+stationcode = '103810'     # Berlin-Dahlem (breakpoint: 1908)
+#stationcode = '685880'     # Durban/Louis Botha (breakpoint: 1939)
+#stationcode = '619930'     # Pamplemousses
 
 plot_timeseries = True
 plot_differences = True
@@ -124,42 +106,16 @@ def moving_average(x, w):
     (vector of float): smoothed vector, which is shorter than the input vector
   """
   return np.convolve(x, np.ones(w), 'valid') / w
-
-def prepare_dists(lats, lons):
-  """
-  Prepare distance matrix from vectors of lat/lon in degrees assuming
-  spherical earth
-  
-  Parameters:
-    lats (vector of float): latitudes
-    lons (vector of float): latitudes
-  
-  Returns:
-    (matrix of float): distance matrix in km
-  """
-  las = np.radians(lats)
-  lns = np.radians(lons)
-  dists = np.zeros([las.size,las.size])
-  for i in range(lns.size):
-    dists[i,:] = 6371.0*np.arccos( np.minimum( (np.sin(las[i])*np.sin(las) + np.cos(las[i])*np.cos(las)*np.cos(lns[i]-lns) ), 1.0 ) )
-  return dists
-
-def smooth_fft(x, span):  
-    
-    y_lo, y_hi, zvarlo, zvarhi, fc, pctl = cru_filter.cru_filter_dft(x, span)    
-    x_filtered = y_lo
-
-    return x_filtered
-
-#def calculate_adjustments(stationcode):
     
 #------------------------------------------------------------------------------
 # LOAD: LEK global dataframe
 #------------------------------------------------------------------------------
 
 df_temp = pd.read_pickle('DATA/df_temp_expect_reduced.pkl', compression='bz2')
-
-df = df_temp[ df_temp['stationcode'] == stationcode ].sort_values(by='year').reset_index(drop=True).dropna()
+df_compressed = df_temp[ df_temp['stationcode'] == stationcode ].sort_values(by='year').reset_index(drop=True).dropna()
+t_yearly = np.arange( df_compressed.iloc[0].year, df_compressed.iloc[-1].year + 1)
+df_yearly = pd.DataFrame({'year':t_yearly})
+df = df_yearly.merge(df_compressed, how='left', on='year')
 dt = df.groupby('year').mean().iloc[:,0:12]
 dn_array = np.array( df.groupby('year').mean().iloc[:,19:31] )
 dn = dt.copy()
@@ -167,18 +123,19 @@ dn.iloc[:,0:] = dn_array
 da = (dt - dn).reset_index()
 de = (df.groupby('year').mean().iloc[:,31:43]).reset_index()
 sd = (df.groupby('year').mean().iloc[:,43:55]).reset_index()        
-ts_monthly = np.array( da.groupby('year').mean().iloc[:,0:12]).ravel()    
-ex_monthly = np.array( de.groupby('year').mean().iloc[:,0:12]).ravel()    
-sd_monthly = np.array( sd.groupby('year').mean().iloc[:,0:12]).ravel()                   
-ts_monthly = np.array( moving_average( ts_monthly, nsmooth ) )    
-ex_monthly = np.array( moving_average( ex_monthly, nsmooth ) )    
-sd_monthly = np.array( moving_average( sd_monthly, nsmooth ) )        
+ts_monthly = np.array( da.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)
+ex_monthly = np.array( de.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)    
+sd_monthly = np.array( sd.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)                   
+
+# COMPUTE: 12-m MA
+
+ts_monthly = np.array( moving_average( ts_monthly, 12 ) )    
+ex_monthly = np.array( moving_average( ex_monthly, 12 ) )    
+sd_monthly = np.array( moving_average( sd_monthly, 12 ) )        
 diff_monthly = ts_monthly - ex_monthly
 
-# Solve Y1677-Y2262 Pandas bug with Xarray:        
-# t_monthly = xr.cftime_range(start=str(da['year'].iloc[0]), periods=len(ts_monthly), freq='M', calendar='noleap')     
 t_monthly = pd.date_range(start=str(da['year'].iloc[0]), periods=len(ts_monthly), freq='M')     
-mask = np.isfinite(ex_monthly)
+mask = np.isfinite(ts_monthly)
 
 # CALCULATE: CUSUM
     	
@@ -187,14 +144,15 @@ y = np.cumsum( diff_monthly[mask] )
 
 # CALL: cru_changepoint_detector
 
-y_fit, y_fit_diff, breakpoints, depth, r, R2adj = cru.changepoint_detector(x, y)
-y_fit_diff = np.array( y_fit_diff ) 
+#y_fit, y_fit_diff, breakpoints, depth, r, R2adj = cru.changepoint_detector(x, y)
+#y_fit_diff = np.array( y_fit_diff ) 
+y_fit, y_fit_diff, y_fit_diff2, slopes, breakpoints, depth, r, R2adj = cru.changepoint_detector(x, y)
    
 # COMPUTE: breakpoints
 
-breakpoints_all = x[mask][ np.abs(y_fit_diff) >= np.abs(np.nanmean(y_fit_diff)) + 6.0*np.abs(np.nanstd(y_fit_diff)) ][0:]    
-breakpoints_idx = np.arange(len(x[mask]))[ np.abs(y_fit_diff) >= np.abs(np.nanmean(y_fit_diff)) + 6.0*np.abs(np.nanstd(y_fit_diff)) ][0:]        
-breakpoints = pd.to_datetime( [x[mask][0]] + list( breakpoints_all ) )
+breakpoints_all = x[ np.abs(y_fit_diff) >= np.abs(np.nanmean(y_fit_diff)) + 6.0*np.abs(np.nanstd(y_fit_diff)) ][0:]    
+breakpoints_idx = np.arange(len(x))[ np.abs(y_fit_diff) >= np.abs(np.nanmean(y_fit_diff)) + 6.0*np.abs(np.nanstd(y_fit_diff)) ][0:]        
+breakpoints = pd.to_datetime( [x[0]] + list( breakpoints_all ) )
 
 # CALCULATE: intra-breakpoint fragment means
     
@@ -229,13 +187,14 @@ if plot_timeseries == True:
     figstr = stationcode + '-' + 'timeseries' + '.png'
     
     fig, ax = plt.subplots(figsize=(15,10))
-    plt.plot(t_monthly, ts_monthly, marker='o', ms=2, mfc='cornflowerblue', ls='-', lw=1, color='deepskyblue', alpha=0.5, label='O')
-    plt.plot(t_monthly, ex_monthly, marker='o', ms=2, mfc='indianred', ls='-', lw=1, color='indianred', alpha=0.5, label='E')
+    plt.scatter(t_monthly[mask], ts_monthly[mask], marker='o', fc='navy', ls='-', lw=1, color='blue', alpha=0.5, label='O')
+    plt.scatter(t_monthly[mask], ex_monthly[mask], marker='o', fc='maroon', ls='-', lw=1, color='red', alpha=0.5, label='E')
     plt.fill_between(t_monthly[mask], ex_monthly[mask]-sd_monthly[mask], ex_monthly[mask]+sd_monthly[mask], color='grey', alpha=0.2, label='uncertainty')
     plt.legend(loc='lower right', ncol=2, markerscale=3, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)       
+    plt.grid(b=None)
     plt.tick_params(labelsize=fontsize)    
     plt.xlabel('Year', fontsize=fontsize)
-    plt.ylabel(r'anomaly (from 1961-1990), $^{\circ}$C', fontsize=fontsize)
+    plt.ylabel(r'Anomaly (from 1961-1990), $^{\circ}$C', fontsize=fontsize)
     plt.title( stationcode, color='white', fontsize=fontsize)           
     fig.tight_layout()
     plt.savefig(figstr, dpi=300)
@@ -246,9 +205,10 @@ if plot_differences == True:
     figstr = stationcode + '-' + 'differences' + '.png'
 
     fig, ax = plt.subplots(figsize=(15,10))
-    plt.plot(t_monthly, diff_monthly, marker='o', ms=2, mfc='gold', ls='-', lw=1, color='gold', alpha=1, label='O-E')
+    plt.scatter(t_monthly[mask], diff_monthly[mask], marker='o', fc='gold', ls='-', lw=1, color='yellow', alpha=0.5, label='O-E')
     plt.fill_between(t_monthly[mask], -sd_monthly[mask], sd_monthly[mask], color='grey', alpha=0.2, label='uncertainty')
     plt.legend(loc='lower right', ncol=2, markerscale=3, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)       
+    plt.grid(b=None)
     plt.tick_params(labelsize=fontsize)    
     plt.xlabel('Year', fontsize=fontsize)
     plt.ylabel(r'O-E difference, $^{\circ}$C', fontsize=fontsize)
@@ -262,18 +222,22 @@ if plot_changepoints == True:
     figstr = stationcode + '-' + 'changepoints' + '.png'
 
     fig, ax = plt.subplots(figsize=(15,10))
-    plt.plot(x[mask], y[mask], marker='o', ms=2, mfc='cornflowerblue', ls='-', lw=1, color='cornflowerblue', alpha=1, label='CUSUM (O-E)')
-    plt.plot(x[mask], y_fit[mask], marker='o', ms=2, mfc='indianred', ls='-', lw=1, color='indianred', alpha=1, label='LTR fit')
-    plt.plot(x[mask], y_fit_diff[mask], marker='o', ms=2, mfc='gold', ls='-', lw=1, color='gold', alpha=1, label='d(LTR)')
-    plt.fill_between(x[mask], 
-                     np.tile( np.abs(np.nanmean(y_fit_diff)) - 6.0*np.abs(np.nanstd(y_fit_diff)), len(x[mask])), 
-                     np.tile( np.abs(np.nanmean(y_fit_diff)) + 6.0*np.abs(np.nanstd(y_fit_diff)), len(x[mask])), 
-                             color='gold', alpha=0.2, label=r'$\mu \pm 6\sigma$')                                          
-    plt.legend(loc='lower right', ncol=2, markerscale=3, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)       
+    plt.scatter(x, y, marker='o', fc='navy', ls='-', lw=1, color='blue', alpha=0.5, label='CUSUM (O-E)')
+    plt.scatter(x, y_fit, marker='.', fc='maroon', ls='-', lw=1, color='red', alpha=0.5, label='LTR fit')
+    plt.fill_between(x, 
+                     np.tile( np.abs(np.nanmean(y_fit_diff)) - 6.0*np.abs(np.nanstd(y_fit_diff)), len(x)), 
+                     np.tile( np.abs(np.nanmean(y_fit_diff)) + 6.0*np.abs(np.nanstd(y_fit_diff)), len(x)), 
+                             color='gold', lw=0, alpha=0.2, label=r'$\mu \pm 6\sigma$')                                                                                   
+    X = [ breakpoints[i] for i in range(len(breakpoints)) ]
+    Y = [np.nan] + list(np.diff(y_fit))     
+    Z = [ Y[ np.arange(len(x))[x==X[i]][0] ] for i in range(len(breakpoints)) ]     
+    plt.scatter(X, Z, marker='o', s=6, fc='gold', ls='-', lw=1, color='yellow', alpha=1, label=r'$\delta$(LTR)')     
+    plt.legend(loc='upper right', ncol=2, markerscale=3, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)       
+    plt.grid(b=None)
     plt.tick_params(labelsize=fontsize)    
     plt.xlabel('Year', fontsize=fontsize)
     plt.ylabel(r'CUSUM, $^{\circ}$C', fontsize=fontsize)
-    plt.title( stationcode, color='white', fontsize=fontsize)           
+    plt.title( stationcode + ': depth=' + str(depth) + r' : $\rho$=' + str(f'{r[depth-1]:03f}'), color='white', fontsize=fontsize)               
     fig.tight_layout()
     plt.savefig(figstr, dpi=300)
     plt.close('all')   
@@ -283,16 +247,17 @@ if plot_adjustments == True:
     figstr = stationcode + '-' + 'adjustments' + '.png'
     
     fig, ax = plt.subplots(figsize=(15,10))
-    plt.plot(t_monthly, ts_monthly, marker='o', ms=2, mfc='cornflowerblue', ls='-', lw=1, color='deepskyblue', alpha=0.5, label='O')
-    plt.plot(t_monthly, ex_monthly, marker='o', ms=2, mfc='indianred', ls='-', lw=1, color='indianred', alpha=0.5, label='E')
-    plt.plot(x[mask], ts_monthly + y_means, '.', ls='-', lw=1, color='skyblue', alpha=1, label='O (adjusted)')
-    plt.plot(x[mask], y_means, '.', ls='-', lw=1, color='gold', alpha=1, label='adjustment')
+    plt.scatter(t_monthly[mask], ts_monthly[mask], marker='o', fc='navy', ls='-', lw=1, color='blue', alpha=0.5, label='O')
+    plt.scatter(t_monthly[mask], ex_monthly[mask], marker='o', fc='maroon', ls='-', lw=1, color='red', alpha=0.5, label='E')
+    plt.scatter(x, ts_monthly[mask] + y_means, marker='+', ls='-', lw=1, color='skyblue', alpha=1, label='O (adjusted)')
+    plt.scatter(x, y_means, marker='.', ls='-', lw=1, color='gold', alpha=1, label='adjustment')
     plt.fill_between(t_monthly[mask], ex_monthly[mask]-sd_monthly[mask], ex_monthly[mask]+sd_monthly[mask], color='grey', alpha=0.2, label='uncertainty')
     plt.legend(loc='lower right', ncol=2, markerscale=3, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)       
+    plt.grid(b=None)
     plt.tick_params(labelsize=fontsize)    
     plt.xlabel('Year', fontsize=fontsize)
-    plt.ylabel(r'anomaly (from 1961-1990), $^{\circ}$C', fontsize=fontsize)
-    plt.title( stationcode, color='white', fontsize=fontsize)           
+    plt.ylabel(r'Anomaly (from 1961-1990), $^{\circ}$C', fontsize=fontsize)
+    plt.title( stationcode + ': depth=' + str(depth) + r' : $\rho$=' + str(f'{r[depth-1]:03f}'), color='white', fontsize=fontsize)               
     fig.tight_layout()
     plt.savefig(figstr, dpi=300)
     plt.close('all')   
@@ -300,5 +265,6 @@ if plot_adjustments == True:
 # ------------------------
 print('** END')
     
+#colors = ['crimson', 'dodgerblue', 'teal', 'limegreen', 'gold']
 
     
