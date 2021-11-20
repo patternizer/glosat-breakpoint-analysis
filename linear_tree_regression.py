@@ -16,7 +16,10 @@
 import numpy as np
 from functools import reduce
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+from datetime import datetime
 #import seaborn as sns; sns.set()
 from itertools import product
 import scipy
@@ -69,21 +72,18 @@ X, y = make_classification(n_samples=100, n_features=4,
 clf = LinearTreeClassifier(base_estimator=RidgeClassifier())
 clf.fit(X, y)
 
+#----------------------------------------------------------------------------------
+import filter_cru_dft as cru_filter # CRU DFT filter
+#import cru_changepoint_detector as cru # CRU changepoint detector
+#----------------------------------------------------------------------------------
+
 #-----------------------------------------------------------------------------
 # SETTINGS
 #-----------------------------------------------------------------------------
 
 max_depth = 9 # in range [1,20]
-#max_r_over_rmax = 0.999
-max_r_over_rmax = 0.99
-#max_r_over_rmax = 0.95
-#max_r_over_rmax = 0.9
 min_separation = 120
 min_slope_change = 6 # CUSUM / decade
-
-fontsize = 16
-plot_correlation = False
-plot_best = True
 
 stationcode = '037401'     # HadCET
 #stationcode = '103810'     # Berlin-Dahlem (breakpoint: 1908)
@@ -95,11 +95,76 @@ stationcode = '037401'     # HadCET
 #stationcode = '688177'     # Cape Town
 #stationcode = '619930'     # Pamplemousses
 
-#documented_change = np.nan
-#documented_change = 1908
-#documented_change = 1939 
+#if stationcode == '103810':
+#    documented_change = 1908
+#elif stationcode == '685880':
+#    documented_change = 1939 
+#else:
+#    documented_change = np.nan
+documented_change = np.nan
 
-use_lek_cusum = False
+fontsize = 16
+use_dark_theme = False
+
+plot_ltr_correlation = True
+plot_ltr_loop = True
+
+nsmooth = 12                  # 1yr MA monthly
+nfft = 10                     # decadal smoothing
+
+#----------------------------------------------------------------------------
+# DARK THEME
+#----------------------------------------------------------------------------
+
+if use_dark_theme == True:
+    
+    matplotlib.rcParams['text.usetex'] = False
+#    rcParams['font.family'] = ['DejaVu Sans']
+#    rcParams['font.sans-serif'] = ['Avant Garde']
+    rcParams['font.family'] = 'sans-serif'
+    rcParams['font.sans-serif'] = ['Avant Garde', 'Lucida Grande', 'Verdana', 'DejaVu Sans' ]
+    plt.rc('text',color='white')
+    plt.rc('lines',color='white')
+    plt.rc('patch',edgecolor='white')
+    plt.rc('grid',color='lightgray')
+    plt.rc('xtick',color='white')
+    plt.rc('ytick',color='white')
+    plt.rc('axes',labelcolor='white')
+    plt.rc('axes',facecolor='black')
+    plt.rc('axes',edgecolor='lightgray')
+    plt.rc('figure',facecolor='black')
+    plt.rc('figure',edgecolor='black')
+    plt.rc('savefig',edgecolor='black')
+    plt.rc('savefig',facecolor='black')
+    
+else:
+
+    matplotlib.rcParams['text.usetex'] = False
+#    rcParams['font.family'] = ['DejaVu Sans']
+#    rcParams['font.sans-serif'] = ['Avant Garde']
+    rcParams['font.family'] = 'sans-serif'
+    rcParams['font.sans-serif'] = ['Avant Garde', 'Lucida Grande', 'Verdana', 'DejaVu Sans' ]
+    plt.rc('text',color='black')
+    plt.rc('lines',color='black')
+    plt.rc('patch',edgecolor='black')
+    plt.rc('grid',color='lightgray')
+    plt.rc('xtick',color='black')
+    plt.rc('ytick',color='black')
+    plt.rc('axes',labelcolor='black')
+    plt.rc('axes',facecolor='white')    
+    plt.rc('axes',edgecolor='black')
+    plt.rc('figure',facecolor='white')
+    plt.rc('figure',edgecolor='white')
+    plt.rc('savefig',edgecolor='white')
+    plt.rc('savefig',facecolor='white')
+
+# Calculate current time
+
+now = datetime.now()
+currentdy = str(now.day).zfill(2)
+currentmn = str(now.month).zfill(2)
+currentyr = str(now.year)
+titletime = str(currentdy) + '/' + currentmn + '/' + currentyr    
 
 #-----------------------------------------------------------------------------
 # METHODS
@@ -150,11 +215,8 @@ def calculate_piecewise_regression( x, y, depth ):
     
     # FIT: linear tree regressor
         
-#    min_samples_leaf = 24
-#    max_bins = 60
-
     min_samples_leaf = 120
-#    max_bins = int(len(x)/60) # range=[10,120]
+#   max_bins = int(len(x)/60) # range=[10,120]
     max_bins = 40 # range=[10,120]
         
     lt = LinearTreeRegressor(
@@ -171,9 +233,6 @@ def calculate_piecewise_regression( x, y, depth ):
        max_depth = depth
     ).fit(x, y)
     x_fit = dr.predict(x)
-
-#    x_fit = x_fit.reshape(-1,1)
-#    y_fit = y_fit.reshape(-1,1)
 
     # COMPUTE: goodness of fit
 
@@ -209,66 +268,58 @@ def calculate_breakpoints( y, y_fit, min_separation, min_slope_change ):
     breakpoints_all = np.arange(len(y))[ np.abs(slopes_diff) > min_slope_change ] - 1     
     breakpoints_diff = np.array( [breakpoints_all[0]] + list( np.diff(breakpoints_all) ) )
     breakpoints = breakpoints_all[ breakpoints_diff > min_separation ] # decade minimum breakpoint separation
-#   breakpoints_all = np.arange(len(t))[ np.abs(y_fit_diff1) >= np.abs(np.nanmean(y_fit_diff1)) + 6.0*np.abs(np.nanstd(y_fit_diff1)) ][0:] 
-#   breakpoints = t[ breakpoints_all > min_separation ]
                 
     return y_fit_diff2, slopes, breakpoints    
 
+def smooth_fft(x, span):  
+    
+    y_lo, y_hi, zvarlo, zvarhi, fc, pctl = cru_filter.cru_filter_dft(x, span)    
+    x_filtered = y_lo
+
+    return x_filtered
+    
 #------------------------------------------------------------------------------
 # LOAD: CUSUM timeseries from local expectation Kriging (LEK) analysis
 #------------------------------------------------------------------------------
-
-if use_lek_cusum == True:
+   
+df_temp = pd.read_pickle('DATA/df_temp_expect_reduced.pkl', compression='bz2')
+df_compressed = df_temp[ df_temp['stationcode'] == stationcode ].sort_values(by='year').reset_index(drop=True).dropna()
+t_yearly = np.arange( df_compressed.iloc[0].year, df_compressed.iloc[-1].year + 1)
+df_yearly = pd.DataFrame({'year':t_yearly})
+df = df_yearly.merge(df_compressed, how='left', on='year')
+dt = df.groupby('year').mean().iloc[:,0:12]
+dn_array = np.array( df.groupby('year').mean().iloc[:,19:31] )
+dn = dt.copy()
+dn.iloc[:,0:] = dn_array
+da = (dt - dn).reset_index()
+de = (df.groupby('year').mean().iloc[:,31:43]).reset_index()
+ds = (df.groupby('year').mean().iloc[:,43:55]).reset_index()        
+ts_monthly = np.array( da.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)
+ex_monthly = np.array( de.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)    
+sd_monthly = np.array( ds.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)                   
+t_monthly = pd.date_range(start=str(da['year'].iloc[0]), periods=len(ts_monthly), freq='M')     
     
-    file_cusum = 'DATA/cusum_' + stationcode + '_obs.csv'
-    df = pd.read_csv( file_cusum, index_col=0 )
-    t_monthly = pd.date_range(start=str(int(np.floor(df.index[0]))), periods=len(df), freq='M')     
-
-    t = t_monthly
-    c = df.cu.values # 12-MA smoothed by LEK algorithm    
+# COMPUTE: 12-m MA
     
-    mask = np.isfinite(c)
-    c = c[mask]
-    t = t[mask]
-    
-#    documented_change_datetime = documented_change
-    
-else:
-    
-    df_temp = pd.read_pickle('DATA/df_temp_expect_reduced.pkl', compression='bz2')
-    df_compressed = df_temp[ df_temp['stationcode'] == stationcode ].sort_values(by='year').reset_index(drop=True).dropna()
-    t_yearly = np.arange( df_compressed.iloc[0].year, df_compressed.iloc[-1].year + 1)
-    df_yearly = pd.DataFrame({'year':t_yearly})
-    df = df_yearly.merge(df_compressed, how='left', on='year')
-    dt = df.groupby('year').mean().iloc[:,0:12]
-    dn_array = np.array( df.groupby('year').mean().iloc[:,19:31] )
-    dn = dt.copy()
-    dn.iloc[:,0:] = dn_array
-    da = (dt - dn).reset_index()
-    de = (df.groupby('year').mean().iloc[:,31:43]).reset_index()
-    ds = (df.groupby('year').mean().iloc[:,43:55]).reset_index()        
-    ts_monthly = np.array( da.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)
-    ex_monthly = np.array( de.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)    
-    sd_monthly = np.array( ds.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)                   
-    t_monthly = pd.date_range(start=str(da['year'].iloc[0]), periods=len(ts_monthly), freq='M')     
-#    documented_change_datetime = pd.to_datetime('01-01-'+str(documented_change),format='%d-%m-%Y')
-    
-    # COMPUTE: 12-m MA
-    
-    a = pd.Series(ts_monthly).rolling(12, center=True).mean().values
-    e = pd.Series(ex_monthly).rolling(12, center=True).mean().values
-    s = pd.Series(sd_monthly).rolling(12, center=True).mean().values
+a = pd.Series(ts_monthly).rolling(12, center=True).mean().values
+e = pd.Series(ex_monthly).rolling(12, center=True).mean().values
+s = pd.Series(sd_monthly).rolling(12, center=True).mean().values
         
-    diff_monthly = ts_monthly - ex_monthly
-    diff_yearly = a - e
+diff_monthly = ts_monthly - ex_monthly
+diff_yearly = a - e
     
-    # CALCULATE: CUSUM
+# CALCULATE: CUSUM
         	
-    t = t_monthly
-    c = np.nancumsum( diff_yearly )
+t = t_monthly
+c = np.nancumsum( diff_yearly )
     
 x = ( np.arange(len(c)) / len(c) ).reshape(-1, 1)
 y = c.reshape(-1, 1)
+
+if np.isnan(documented_change):
+    documented_change_datetime = np.nan
+else:        
+    documented_change_datetime = pd.to_datetime('01-01-'+str(documented_change),format='%d-%m-%Y')
 
 #------------------------------------------------------------------------------
 # FIT: linear tree regression (LTR) model
@@ -291,26 +342,71 @@ for depth in range(1,max_depth+1):
                
 r_diff = np.array( [np.nan] + list(np.diff(r)) )
 max_depth_optimum = np.arange(1,max_depth+1)[ r_diff < 0.001 ][0] - 1
-#max_depth_optimum = np.arange(1,max_depth+1)[np.array(r/np.max(r)) >= max_r_over_rmax][1] - 1 
 
-# GRAPHVIZ: plot regression tree model (full) and to depth=3
-            
+#------------------------------------------------------------------------------
+# BEST: case
+#------------------------------------------------------------------------------
+
+x_fit, y_fit, corrcoef, R2adj = calculate_piecewise_regression( x, y, max_depth_optimum )    
+y_fit_diff2, slopes, breakpoints = calculate_breakpoints( y, y_fit, min_separation, min_slope_change )
+
+# CALCULATE: intra-breakpoint fragment means
+        
+y_means = []
+adjustments = []
+for j in range(len(breakpoints)+1):                
+    if j == 0:              
+        y_means = y_means + list( np.tile( -np.nanmean(diff_yearly[0:breakpoints[j]]), breakpoints[j] ) ) 
+        adjustment = [ -np.nanmean(diff_yearly[0:breakpoints[j]]) ]
+    if (j > 0) & (j<len(breakpoints)):
+        y_means = y_means + list( np.tile( -np.nanmean(diff_yearly[breakpoints[j-1]:breakpoints[j]]), breakpoints[j]-breakpoints[j-1] )) 
+        adjustment = [ -np.nanmean(diff_yearly[breakpoints[j-1]:breakpoints[j]]) ]
+    if (j == len(breakpoints)):              
+        y_means = y_means + list( np.tile( -np.nanmean(diff_yearly[breakpoints[-1]:]), len(diff_yearly)-breakpoints[-1] ) ) 
+        adjustment = [ -np.nanmean(diff_yearly[breakpoints[-1]:]) ]
+    adjustments.append(adjustment)
+        
+y_means = np.array( y_means ) 
+adjustments = np.array(adjustments).ravel()
+
+#------------------------------------------------------------------------------
+# WRITE: breakpoints and segment adjustments to CSV
+#------------------------------------------------------------------------------
+
+file_breakpoints = stationcode + '-' + 'breakpoints.csv'    
+file_adjustments = stationcode + '-' + 'adjustments.csv'    
+
+df_breakpoints = pd.DataFrame( {'breakpoint':t[breakpoints]}, index=np.arange(1,len(breakpoints)+1) )
+df_breakpoints.to_csv( file_breakpoints )
+df_adjustments = pd.DataFrame( {'adjustment':adjustments}, index=np.arange(1,len(adjustments)+1) )
+df_adjustments.to_csv( file_adjustments )    
+          
+#==============================================================================
+# PLOTS
+#==============================================================================
+
+if use_dark_theme == True:
+    default_color = 'white'
+else:    
+    default_color = 'black'    		
+
+# GRAPHVIZ: plot regression tree model (full) and to depth=3            
 # lt.plot_model(max_depth=max_depth_optimum)
 
-if plot_correlation == True: 
-        
-    #------------------------------------------------------------------------------
-    # PLOT: correlation r and R2adj as a function of knot number
-    #------------------------------------------------------------------------------
-        
-    figstr = stationcode + '-' + 'cusum-curve-linear-tree-correlation.png'
+#------------------------------------------------------------------------------
+# PLOT: correlation r and R2adj as a function of linear regression tree depth
+#------------------------------------------------------------------------------
+
+if plot_ltr_correlation == True: 
+                
+    figstr = stationcode + '-' + 'ltr-correlation.png'
                 
     fig, ax = plt.subplots(figsize=(15,10))
-    plt.axvline( x=max_depth_optimum, ls='--', lw=1, color='white')
+    plt.axvline( x=max_depth_optimum, ls='--', lw=1, color=default_color)
     plt.plot(np.arange( 1, max_depth+1), r, marker='o', ms=6, ls='-', lw=1, color='teal', alpha=1, label=r'$\rho$')
-    plt.plot(np.arange( 1, max_depth+1), r2adj, marker='o', ms=6, ls='-', lw=1, color='purple', alpha=1, label=r'$R^{2}_{adj}$')
+    plt.plot(np.arange( 1, max_depth+1), r2adj, marker='o', ms=6, ls='-', lw=1, color='lightblue', alpha=1, label=r'$R^{2}_{adj}$')
     plt.plot( max_depth_optimum, r[max_depth_optimum-1], marker='o', ms=12, ls='-', lw=3, color='teal', alpha=0.5, label=r'$\rho$( BEST )')
-    plt.plot( max_depth_optimum, r2adj[max_depth_optimum-1], marker='o', markersize=12, ls='-', lw=3, color='purple', alpha=0.5, label=r'$R^{2}_{adj}$( BEST )')
+    plt.plot( max_depth_optimum, r2adj[max_depth_optimum-1], marker='o', markersize=12, ls='-', lw=3, color='lightblue', alpha=0.5, label=r'$R^{2}_{adj}$( BEST )')
     ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
     ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
     plt.grid(b=None)
@@ -320,140 +416,76 @@ if plot_correlation == True:
     plt.grid(b=None)
     plt.tick_params(labelsize=fontsize)  
     plt.xlabel('Depth', fontsize=fontsize)
-    plt.ylabel(r'Correlation', fontsize=fontsize)
-    plt.legend(loc='lower right', ncol=1, markerscale=1, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)   
-    plt.title( stationcode, color='white', fontsize=fontsize)           
-    fig.tight_layout()
+    plt.ylabel(r'Goodness of fit', fontsize=fontsize)
+    fig.legend(loc='lower center', ncol=4, markerscale=1, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)   
+    fig.subplots_adjust(left=0.1, bottom=0.15, right=None, top=None, wspace=None, hspace=None)  
+    plt.title( stationcode, color=default_color, fontsize=fontsize)           
     plt.savefig(figstr, dpi=300)
     plt.close('all')    
-
+ 
 #------------------------------------------------------------------------------
-# PLOT: breakpoints as a function of linear tree depth
+# PLOT: LTR breakpoint detection LOOP
 #------------------------------------------------------------------------------
 
-fontsize = 12
-    
-figstr = stationcode + '-' + 'cusum-curve-linear-tree-loop.png'
-fig, ax = plt.subplots(figsize=(15,10))
+if plot_ltr_loop == True: 
 
-for depth in range(1, max_depth+1):       
+	fontsize_multi = 12
+		
+	figstr = stationcode + '-' + 'ltr-loop.png'
+	fig, ax = plt.subplots(figsize=(15,10))
 
-    x_fit, y_fit, corrcoef, R2adj = calculate_piecewise_regression( x, y, depth )    
-    y_fit_diff2, slopes, breakpoints = calculate_breakpoints( y, y_fit, min_separation, min_slope_change )
+	for depth in range(1, max_depth+1):       
 
-    plt.subplot(nr, nc, depth)
-    if depth < max_depth:        
-#        plt.axvline(x=documented_change_datetime, ls='--', lw=1, color='black')     
-        plt.scatter(t, y.ravel(), marker='.', s=3, fc='navy', ls='-', lw=1, color='blue', alpha=0.5)
-        plt.plot(t, y_fit.ravel(), color='red', ls='-', lw=1)        
-        plt.fill_between( t, slopes.ravel(), 0, color='blue', alpha=0.1)
-    else:
-#        plt.axvline(x=documented_change_datetime, ls='--', lw=1, color='black', label='Documented change: ' + str(documented_change) )     
-        plt.scatter(t, y, marker='.', s=3, fc='navy', ls='-', lw=1, color='blue', alpha=0.5, label='CUSUM (O-E)')
-        plt.plot(t, y_fit, color='red', ls='-', lw=1, label='LTR fit')        
-        plt.fill_between( t, slopes, 0, color='blue', alpha=0.1, label='slope: CUSUM/decade' )
-    ylimits = plt.ylim()       
-                
-    if depth == max_depth_optimum:
-        plt.title( stationcode + ': depth=' + str(depth) + r' ( BEST ): $\rho$=' + str( f'{r[depth-1]:03f}' ), color='black', fontsize=fontsize)                   
-        df_breakpoints = pd.DataFrame({'breakpoint':t[breakpoints]})
-        df_breakpoints.to_csv(stationcode + '-' + 'breakpoints.csv')
-        for i in range(len(t[(y_fit_diff2>0).ravel()])):
-            if i==0:
-                plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color='black', alpha=0.2, label='LTR segment') 
-            else:
-                plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color='black', alpha=0.2) 
-        for i in range(len(breakpoints)):
-            if i==0:
-                plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color='black', label='Breakpoint')
-            else:
-                plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color='black')     
-    else:
-        plt.title( stationcode + ': depth=' + str(depth) + r' : $\rho$=' + str( f'{r[depth-1]:03f}' ), color='black', fontsize=fontsize)           
-        for i in range(len(t[(y_fit_diff2>0).ravel()])):
-            plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color='black', alpha=0.2) 
-        for i in range(len(breakpoints)):
-            plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color='black')     
-               
-    ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
-    ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
-    ax.grid(b=None)    
-    plt.tick_params(labelsize=fontsize)    
-    plt.xlabel('Year', fontsize=fontsize)
-    plt.ylabel(r'CUSUM, $^{\circ}$C', fontsize=fontsize)    
-    fig.tight_layout()
+		x_fit, y_fit, corrcoef, R2adj = calculate_piecewise_regression( x, y, depth )    
+		y_fit_diff2, slopes, breakpoints = calculate_breakpoints( y, y_fit, min_separation, min_slope_change )
 
-fig.legend(loc='lower right', ncol=2, markerscale=3, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)       
-fig.subplots_adjust(left=None, bottom=0.15, right=None, top=None, wspace=None, hspace=None)  
-plt.savefig(figstr, dpi=300)
-plt.close('all')    
+		plt.subplot(nr, nc, depth)
+		if depth < max_depth:        
+			if ~np.isnan(documented_change): plt.axvline(x=documented_change_datetime, ls='-', lw=2, color='gold')                   
+			plt.plot(t, y.ravel(), color='blue', ls='-', lw=3)
+			plt.plot(t, y_fit.ravel(), color='red', ls='-', lw=2)            
+			plt.fill_between( t, slopes.ravel(), 0, color='lightblue', alpha=0.5)
+		else:
+			if ~np.isnan(documented_change): plt.axvline(x=documented_change_datetime, ls='-', lw=2, color='gold', label='Documented change: ' + str(documented_change) )                   
+			plt.plot( t, y, color='blue', ls='-', lw=3, label='CUSUM (O-E)')
+			plt.plot( t, y_fit, color='red', ls='-', lw=2, label='LTR fit')
+			plt.fill_between( t, slopes, 0, color='lightblue', alpha=0.5, label='CUSUM / decade' )
+		ylimits = plt.ylim()       
+					
+		if depth == max_depth_optimum:
+			plt.title( stationcode + ': depth=' + str(depth) + r' ( BEST ): $\rho$=' + str( f'{r[depth-1]:03f}' ), color=default_color, fontsize=fontsize_multi)                   
+			df_breakpoints = pd.DataFrame({'breakpoint':t[breakpoints]})
+			df_breakpoints.to_csv(stationcode + '-' + 'breakpoints.csv')
+			for i in range(len(t[(y_fit_diff2>0).ravel()])):
+				if i==0:
+					plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
+				else:
+					plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2) 
+			for i in range(len(breakpoints)):
+				if i==0:
+					plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
+				else:
+					plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)     
+		else:
+			plt.title( stationcode + ': depth=' + str(depth) + r' : $\rho$=' + str( f'{r[depth-1]:03f}' ), color=default_color, fontsize=fontsize_multi)           
+			for i in range(len(t[(y_fit_diff2>0).ravel()])):
+				plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2) 
+			for i in range(len(breakpoints)):
+				plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)     
+		plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
+		ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
+		ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
+		ax.grid(b=None)    
+		plt.tick_params(labelsize=fontsize_multi)    
+		plt.xlabel('Year', fontsize=fontsize_multi)
+		plt.ylabel(r'CUSUM (O-E), $^{\circ}$C', fontsize=fontsize_multi)    
+		fig.tight_layout()
+
+	fig.legend(loc='lower center', ncol=5, markerscale=6, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize_multi)       
+	fig.subplots_adjust(left=0.1, bottom=0.1, right=None, top=None, wspace=None, hspace=None)  
+	plt.savefig(figstr, dpi=300)
+	plt.close('all')    
                   
 #------------------------------------------------------------------------------
-print('** END')
-
-if plot_best == True:
-        
-    x_fit, y_fit, corrcoef, R2adj = calculate_piecewise_regression( x, y, max_depth_optimum )    
-    y_fit_diff2, slopes, breakpoints = calculate_breakpoints( y, y_fit, min_separation, min_slope_change )
-    
-    figstr = stationcode + '-' + 'cusum-curve-breakpoint-selection.png'                
-    fig, ax = plt.subplots(figsize=(15,10))
-    plt.plot( t, y, color='blue', ls='-', lw=3, label='CUSUM (O-E)')
-    plt.plot( t, y_fit, color='red', ls='-', lw=2, label='LTR fit')
-    plt.fill_between( t, slopes, 0, color='blue', alpha=0.1, label='slope: CUSUM/decade' )    
-    for i in range(len(t[(y_fit_diff2>0).ravel()])):
-        if i==0:
-            plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color='black', alpha=0.2, label='LTR segment') 
-        else:
-            plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color='black', alpha=0.2) 
-    for i in range(len(breakpoints)):
-        if i==0:
-            plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color='black', label='Breakpoint')
-        else:
-            plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color='black')    
-    ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
-    ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
-    plt.grid(b=None)
-    plt.tick_params(labelsize=fontsize)  
-    plt.xlabel('Year', fontsize=fontsize)
-    plt.ylabel(r'CUSUM, $^{\circ}$C', fontsize=fontsize)
-    plt.legend(loc='lower right', ncol=1, markerscale=1, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)   
-    plt.title( stationcode, color='black', fontsize=fontsize)           
-    fig.tight_layout()
-    plt.savefig(figstr, dpi=300)
-    plt.close('all')    
-
-    if use_lek_cusum == False:
-    
-        figstr = stationcode + '-' + 'cusum-curve-breakpoint-timeseries.png'                
-        fig, ax = plt.subplots(figsize=(15,10))
-        plt.scatter(t, diff_yearly, marker='o', fc='yellow', ls='-', lw=1, color='gold', alpha=1, label='O-E')
-        for i in range(len(t[(y_fit_diff2>0).ravel()])):
-            if i==0:
-                plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color='black', alpha=0.2, label='LTR segment') 
-            else:
-                plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color='black', alpha=0.2) 
-        for i in range(len(breakpoints)):
-            if i==0:
-                plt.plot( t[0:breakpoints[i]], np.tile( np.nanmean(diff_yearly[0:breakpoints[i]]), breakpoints[i] ), color='red')
-                plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color='black', label='Breakpoint')
-            else:
-                plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color='black')    
-                plt.plot( t[breakpoints[i-1]:breakpoints[i]], np.tile( np.nanmean(diff_yearly[breakpoints[i-1]:breakpoints[i]]), breakpoints[i]-breakpoints[i-1] ), color='red')
-            if i==len(breakpoints)-1:
-                plt.plot( t[breakpoints[i]:], np.tile( np.nanmean(diff_yearly[breakpoints[i]:]), len(t)-breakpoints[i] ), color='red', label='segment mean')
-                
-        ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
-        ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
-        plt.grid(b=None)
-        plt.tick_params(labelsize=fontsize)  
-        plt.xlabel('Year', fontsize=fontsize)
-        plt.ylabel(r'Anomaly difference, $^{\circ}$C', fontsize=fontsize)
-        plt.legend(loc='upper right', ncol=1, markerscale=1, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)   
-        plt.title( stationcode, color='black', fontsize=fontsize)           
-        fig.tight_layout()
-        plt.savefig(figstr, dpi=300)
-        plt.close('all')    
-        
-        
+print('** END')        
     

@@ -69,8 +69,8 @@ def changepoint_detector(x,y):
     #--------------------------------------------------------------------------
 
     max_depth = 9 # in range [1,20]
-    min_samples_leaf = 60 # 1 decade
-    max_bins = 20 # 1/3 of min_samples_leaf
+    min_samples_leaf = 120 # 1 decade
+    max_bins = 40 # 1/3 of min_samples_leaf
     min_separation = 120 # 1 decade
     min_slope_change = 6 # CUSUM / decade
 
