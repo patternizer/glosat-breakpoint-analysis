@@ -248,7 +248,7 @@ if plot_cusum == True:
         
 if plot_adjustments == True:
 	    
-    figstr = stationcode + '-' + 'adjustments.png'                
+    figstr = stationcode + '-' + 'ltr-ols.png'                
 
     fig, ax = plt.subplots(figsize=(15,10))
     plt.scatter(t, a, marker='o', fc='blue', ls='-', lw=1, color='blue', alpha=0.5, label='O')
