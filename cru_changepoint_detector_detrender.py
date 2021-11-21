@@ -21,6 +21,14 @@ import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from datetime import datetime
 
+import scipy
+from sklearn import linear_model
+from sklearn.linear_model import *
+import statsmodels.api as sm
+from lineartree import LinearTreeClassifier, LinearTreeRegressor
+from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+
+
 #----------------------------------------------------------------------------------
 import filter_cru_dft as cru_filter # CRU DFT filter
 import cru_changepoint_detector as cru # CRU changepoint detector
@@ -109,6 +117,21 @@ def smooth_fft(x, span):
 
     return x_filtered
     
+def linear_regression_ols(x,y):
+    
+    regr = linear_model.LinearRegression()
+    # regr = TheilSenRegressor(random_state=42)
+    # regr = RANSACRegressor(random_state=42)
+    
+    X = x.reshape(len(x),1)
+    xpred = np.linspace(X.min(),X.max(),len(X)) # dummy var spanning [xmin,xmax]        
+    regr.fit(X, y)
+    ypred = regr.predict(xpred.reshape(-1, 1))
+    slope = regr.coef_[0]
+    intercept = regr.intercept_     
+        
+    return xpred, ypred, slope, intercept
+
 #------------------------------------------------------------------------------
 # LOAD: CUSUM timeseries from local expectation Kriging (LEK) analysis
 #------------------------------------------------------------------------------
@@ -152,7 +175,7 @@ y_means = []
 adjustments = []
 for j in range(len(breakpoints)+1):                
     if j == 0:              
-        y_means = y_means + list( np.tile( -np.nanmean(ts_monthly[0:breakpoints[j]]), breakpoints[j] ) ) 
+        y_means = y_means + list( np.tile( -np.nanmean(ts_monthly[0:breakpoints[j]]), breakpoints[j] ) )         
         adjustment = [ -np.nanmean(ts_monthly[0:breakpoints[j]]) ]
     if (j > 0) & (j<len(breakpoints)):
         y_means = y_means + list( np.tile( -np.nanmean(ts_monthly[breakpoints[j-1]:breakpoints[j]]), breakpoints[j]-breakpoints[j-1] )) 
@@ -222,28 +245,67 @@ if plot_cusum == True:
 #------------------------------------------------------------------------------
 # PLOT: O, O(adjusted) and E with breakpoints and adjustments
 #------------------------------------------------------------------------------
-    
+        
 if plot_adjustments == True:
 	    
     figstr = stationcode + '-' + 'adjustments.png'                
 
     fig, ax = plt.subplots(figsize=(15,10))
     plt.scatter(t, a, marker='o', fc='blue', ls='-', lw=1, color='blue', alpha=0.5, label='O')
-    plt.scatter(t, a + y_means, marker='o', fc='lightblue', ls='-', lw=1, color='lightblue', alpha=0.5, label='O (detrended)')
+    plt.scatter(t, a + y_means, marker='o', fc='lightblue', ls='-', lw=1, color='lightblue', alpha=0.5, label='O (detrended)')    
     for i in range(len(t[(y_fit_diff2>0).ravel()])):
         if i==0:
             plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
         else:
-            plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2) 
+            plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2)        
     for i in range(len(breakpoints)):
         if i==0:
             plt.plot( t[0:breakpoints[i]], np.tile( -np.nanmean(a[0:breakpoints[i]]), breakpoints[i] ), ls='-', lw=3, color='gold')
             plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
+
+            # FIT: OLS to segment
+
+            T = t[0:breakpoints[i]]
+            X = x[0:breakpoints[i]]
+            Y = a[0:breakpoints[i]]
+            mask = np.isfinite(Y)
+            T = T[mask]
+            X = X[mask]
+            Y = Y[mask]
+            xpred, ypred, slope, intercept = linear_regression_ols(X,Y)
+            plt.scatter(T, ypred, marker='.', fc='red', ls='-', lw=1, color='red', alpha=0.5, label='OLS trend')    
+
         else:
             plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
             plt.plot( t[breakpoints[i-1]:breakpoints[i]], np.tile( -np.nanmean(a[breakpoints[i-1]:breakpoints[i]]), breakpoints[i]-breakpoints[i-1] ), ls='-', lw=3, color='gold')
+
+            # FIT: OLS to segment
+            
+            T = t[breakpoints[i-1]:breakpoints[i]]
+            X = x[breakpoints[i-1]:breakpoints[i]]
+            Y = a[breakpoints[i-1]:breakpoints[i]]
+            mask = np.isfinite(Y)
+            T = T[mask]
+            X = X[mask]
+            Y = Y[mask]
+            xpred, ypred, slope, intercept = linear_regression_ols(X,Y)
+            plt.scatter(T, ypred, marker='.', fc='red', ls='-', lw=1, color='red', alpha=0.5)    
+
         if i==len(breakpoints)-1:
             plt.plot( t[breakpoints[i]:], np.tile( -np.nanmean(a[breakpoints[i]:]), len(t)-breakpoints[i] ), ls='-', lw=3, color='gold', label='Adjustment')                
+            
+            # FIT: OLS to segment
+
+            T = t[breakpoints[i]:]
+            X = x[breakpoints[i]:]
+            Y = a[breakpoints[i]:]
+            mask = np.isfinite(Y)
+            T = T[mask]
+            X = X[mask]
+            Y = Y[mask]
+            xpred, ypred, slope, intercept = linear_regression_ols(X,Y)
+            plt.scatter(T, ypred, marker='.', fc='red', ls='-', lw=1, color='red', alpha=0.5)    
+            
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
     ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
     ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
