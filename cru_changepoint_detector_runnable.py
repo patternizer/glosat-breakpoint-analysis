@@ -20,9 +20,6 @@ import pickle
 
 # Datetime libraries:
 from datetime import datetime
-#import nc_time_axis
-#import cftime
-#from cftime import num2date, DatetimeNoLeap
 
 # OS libraries:
 import os, sys
@@ -175,7 +172,6 @@ def calculate_adjustments(stationcode):
         print('STATION DATA: not available. Returning ...')
         breakpoints = []
         adjustments = []
-        return breakpoints, adjustments
     else:
         print('STATION DATA:', ts_monthly)
         
@@ -221,15 +217,25 @@ def calculate_adjustments(stationcode):
             y_means = y_means + list( np.tile( -np.nanmean(diff_yearly[0:breakpoints[j]]), breakpoints[j] ) ) 
             adjustment = [ -np.nanmean(diff_yearly[0:breakpoints[j]]) ]
         if (j > 0) & (j<len(breakpoints)):
-            y_means = y_means + list( np.tile( -np.nanmean(diff_yearly[breakpoints[j-1]:breakpoints[j]]), breakpoints[j]-breakpoints[j-1] )) 
+            y_means = y_means + list( -np.tile( np.nanmean(diff_yearly[breakpoints[j-1]:breakpoints[j]]), breakpoints[j]-breakpoints[j-1] )) 
             adjustment = [ -np.nanmean(diff_yearly[breakpoints[j-1]:breakpoints[j]]) ]
         if (j == len(breakpoints)):              
-            y_means = y_means + list( np.tile( -np.nanmean(diff_yearly[breakpoints[-1]:]), len(diff_yearly)-breakpoints[-1] ) ) 
+            y_means = y_means + list( -np.tile( np.nanmean(diff_yearly[breakpoints[-1]:]), len(diff_yearly)-breakpoints[-1] ) ) 
             adjustment = [ -np.nanmean(diff_yearly[breakpoints[-1]:]) ]
         adjustments.append(adjustment)
         
     y_means = np.array( y_means ) 
     adjustments = np.array(adjustments).ravel()
+
+    # STATISTICS    
+
+    rmse = np.sqrt( np.nanmean( diff_yearly**2.0 ) )
+    mae = np.nanmean( np.abs( y_means ) )
+    breakpoint_flags = np.array(len(ts_monthly) * [False])
+    for j in range(len(breakpoints)):
+        breakpoint_flags[breakpoints[j]] = True
+        
+    df = pd.DataFrame( {'time':t, 'breakpoint':breakpoint_flags, 'adjustment':-diff_yearly, 'segment_mean':y_means}, index=np.arange(len(t)) )          
 
     #------------------------------------------------------------------------------
     # WRITE: breakpoints and segment adjustments to CSV
