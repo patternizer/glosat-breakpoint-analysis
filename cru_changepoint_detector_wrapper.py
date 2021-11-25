@@ -19,6 +19,11 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from datetime import datetime
+import netCDF4
+from netCDF4 import Dataset, num2date, date2num
+
+# System libraries:
+import os
 
 #----------------------------------------------------------------------------------
 import filter_cru_dft as cru_filter # CRU DFT filter
@@ -29,7 +34,7 @@ import cru_changepoint_detector as cru # CRU changepoint detector
 # SETTINGS
 #-----------------------------------------------------------------------------
 
-#stationcode = '037401'     # HadCET
+stationcode = '037401'     # HadCET
 #stationcode = '103810'     # Berlin-Dahlem (breakpoint: 1908)
 #stationcode = '685880'     # Durban/Louis Botha (breakpoint: 1939)
 #stationcode = '024581'     # Uppsala
@@ -37,7 +42,7 @@ import cru_changepoint_detector as cru # CRU changepoint detector
 #stationcode = '062600'     # St Petersberg
 #stationcode = '260630'     # De Bilt
 #stationcode = '688177'     # Cape Town
-stationcode = '619930'     # Pamplemousses
+#stationcode = '619930'     # Pamplemousses
 
 #if stationcode == '103810':
 #    documented_change = 1908
@@ -122,6 +127,28 @@ def smooth_fft(x, span):
     x_filtered = y_lo
 
     return x_filtered
+
+def merge_fix_cols(df1,df2,var):
+    '''
+    df1: full time range dataframe (container)
+    df2: observation time range
+    df_merged: merge of observations into container
+    var: 'time' or name of datetime column
+    '''
+    
+    df_merged = pd.merge( df1, df2, how='left', left_on=var, right_on=var)    
+#   df_merged = pd.merge( df1, df2, how='left', on=var)    
+#   df_merged = df1.merge(df2, how='left', on=var)
+    
+    for col in df_merged:
+        if col.endswith('_y'):
+            df_merged.rename(columns = lambda col:col.rstrip('_y'),inplace=True)
+        elif col.endswith('_x'):
+            to_drop = [col for col in df_merged if col.endswith('_x')]
+            df_merged.drop( to_drop, axis=1, inplace=True)
+        else:
+            pass
+    return df_merged
     
 #------------------------------------------------------------------------------
 # LOAD: CUSUM timeseries from local expectation Kriging (LEK) analysis
@@ -129,6 +156,16 @@ def smooth_fft(x, span):
          
 df_temp = pd.read_pickle('DATA/df_temp_expect_reduced.pkl', compression='bz2')
 df_compressed = df_temp[ df_temp['stationcode'] == stationcode ].sort_values(by='year').reset_index(drop=True).dropna()
+
+#['year', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12',
+#       'stationcode', 'stationlat', 'stationlon', 'stationelevation',
+#       'stationname', 'stationcountry', 'stationfirstyear', 'stationlastyear',
+#       'stationsource', 'stationfirstreliable', 'n1', 'n2', 'n3', 'n4', 'n5',
+#       'n6', 'n7', 'n8', 'n9', 'n10', 'n11', 'n12', 'e1', 'e2', 'e3', 'e4',
+#       'e5', 'e6', 'e7', 'e8', 'e9', 'e10', 'e11', 'e12', 's1', 's2', 's3',
+#       's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11', 's12'],
+#      dtype='object')
+    
 t_yearly = np.arange( df_compressed.iloc[0].year, df_compressed.iloc[-1].year + 1)
 df_yearly = pd.DataFrame({'year':t_yearly})
 df = df_yearly.merge(df_compressed, how='left', on='year')
@@ -150,8 +187,8 @@ ts_monthly = np.array( da.groupby('year').mean().iloc[:,0:12]).ravel().astype(fl
 ex_monthly = np.array( de.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)    
 sd_monthly = np.array( ds.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)                   
 # Solve Y1677-Y2262 Pandas bug with Xarray:        
-# t_monthly = xr.cftime_range(start=str(da['year'].iloc[0]), periods=len(ts_monthly), freq='M', calendar='noleap')      
-t_monthly = pd.date_range(start=str(da['year'].iloc[0]), periods=len(ts_monthly), freq='M')     
+# t_monthly = xr.cftime_range(start=str(da['year'].iloc[0]), periods=len(ts_monthly), freq='MS', calendar='noleap')      
+t_monthly = pd.date_range(start=str(da['year'].iloc[0]), periods=len(ts_monthly), freq='MS')     
        
 # COMPUTE: 12-m MA
     
@@ -240,6 +277,114 @@ df_seasonal_fft['SON'] = pd.DataFrame({'DJF':smooth_fft(df_seasonal['SON'].value
 df_seasonal_fft['ONDJFM'] = pd.DataFrame({'ONDJFM':smooth_fft(df_seasonal['ONDJFM'].values[mask['ONDJFM']], nfft)}, index=df_seasonal['ONDJFM'].index[mask['ONDJFM']])
 df_seasonal_fft['AMJJAS'] = pd.DataFrame({'AMJJAS':smooth_fft(df_seasonal['AMJJAS'].values[mask['AMJJAS']], nfft)}, index=df_seasonal['AMJJAS'].index[mask['AMJJAS']])
 mask_fft = np.isfinite(df_seasonal_fft)
+
+# STATISTICS
+
+rmse = np.sqrt( np.nanmean( diff_yearly**2.0 ) )
+mae = np.nanmean( np.abs( y_means ) )
+breakpoint_flags = np.array(len(ts_monthly) * [False])
+for j in range(len(breakpoints)):
+    breakpoint_flags[breakpoints[j]] = True
+        
+df = pd.DataFrame( {'time':t, 'breakpoint':breakpoint_flags, 'adjustment':-1.0*diff_yearly, 'segment_mean':y_means}, index=np.arange(len(t)) )          
+
+# MERGE: into full GloSAT timeframe container: 1780-2020 (inclusive)
+
+#t_monthly = pd.date_range(start='01-01-1780', end='31-12-2020', freq='M')     
+t_monthly = pd.date_range(start='1780', end='2021', freq='MS')[0:-1]
+
+df_full = pd.DataFrame({'time':t_monthly})
+df_full['breakpoint'] = False
+df_full['adjustment'] = np.nan
+df_full['segment_mean'] = np.nan
+df1 = df_full
+df2 = df
+var = 'time'
+df_merged = merge_fix_cols( df1, df2, var)
+
+time = df_merged['time']
+
+#------------------------------------------------------------------------------
+# EXPORT: data to netCDF-4
+#------------------------------------------------------------------------------
+            
+# OPEN: netCDF file for writing
+    
+ncout = Dataset(stationcode + '-' + 'breakpoints.nc', 'w', format='NETCDF4')
+    
+# ADD: // global attributes
+    
+ncout.title = 'GloSAT station breakpoints and adjustments'
+ncout.source = 'GloSAT.p03'
+ncout.version = 'GloSAT.p03-lek'
+ncout.Conventions = 'CF-1.7'
+ncout.reference = 'Osborn, T. J., P. D. Jones, D. H. Lister, C. P. Morice, I. R. Simpson, J. P. Winn, E. Hogan and I. C. Harris (2020), Land surface air temperature variations across the globe updated to 2019: the CRUTEM5 data set, Journal of Geophysical Research: Atmospheres, 126, e2019JD032352. https://doi.org/10.1029/2019JD032352'
+ncout.institution = 'Climatic Research Unit, University of East Anglia / Met Office Hadley Centre / University of York'
+ncout.licence = 'GloSAT is licensed under the Open Government Licence v3.0 except where otherwise stated. To view this licence, visit https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3'
+ncout.history = 'File generated on {} (UTC) by {}'.format(datetime.utcnow().strftime('%c'), os.path.basename(__file__))            
+ncout.stationid = df_compressed.stationcode.unique()[0]
+ncout.stationlat = np.round( float(df_compressed.stationlat.unique()[0]) ,2)
+ncout.stationlon = np.round( float(df_compressed.stationlon.unique()[0]), 2)
+ncout.stationelevation = np.round( float(df_compressed.stationelevation.unique()[0]), 2)
+ncout.stationname = df_compressed.stationname.unique()[0]
+ncout.stationcountry = df_compressed.stationcountry.unique()[0]
+ncout.stationfirstyear = int(df_compressed.stationfirstyear.unique()[0])
+ncout.stationlastyear = int(df_compressed.stationlastyear.unique()[0])
+ncout.stationsource = int(df_compressed.stationsource.unique()[0])
+ncout.stationfirstreliable = int(df_compressed.stationfirstreliable.unique()[0])
+
+# CREATE: dimensions
+
+ncout.createDimension( 'time', len(time) )
+
+# SAVE: data to variables
+    
+# datatype specifiers include: 
+# 'f4' (32-bit floating point), 
+# 'f8' (64-bit floating point), 
+# 'i4' (32-bit signed integer), 
+# 'i2' (16-bit signed integer), 
+# 'i8' (64-bit signed integer), 
+# 'i1' (8-bit signed integer), 
+# 'u1' (8-bit unsigned integer), 
+# 'u2' (16-bit unsigned integer), 
+# 'u4' (32-bit unsigned integer), 
+# 'u8' (64-bit unsigned integer), 
+# 'S1' (single-character string)
+        
+ncout_time = ncout.createVariable('time', 'i4', ('time',))
+units = 'months since 1850-01-01 00:00:00'
+ncout_time.setncattr('unit',units)
+ncout_time[:] = [ date2num(time[i], units, calendar='360_day') for i in range(len(time)) ]
+# calendar: 'standard’, ‘gregorian’, ‘proleptic_gregorian’ ‘noleap’, ‘365_day’, ‘360_day’, ‘julian’, ‘all_leap’, ‘366_day’
+    
+ncout_breakpoint = ncout.createVariable('breakpoint_flag', 'f4', ('time',))
+ncout_breakpoint.units = '1'
+ncout_breakpoint.standard_name = 'breakpoint_flag'
+ncout_breakpoint.long_name = 'breakpoint_flag_boolean'
+ncout_breakpoint.cell_methods = 'time: mean (interval: 1 month)'
+ncout_breakpoint.fill_value = -1.e+30
+ncout_breakpoint[:] = df_merged['breakpoint'].values
+
+ncout_adjustment = ncout.createVariable('adjustment', 'f4', ('time',))
+ncout_adjustment.units = '1'
+ncout_adjustment.standard_name = 'adjustment'
+ncout_adjustment.long_name = 'qdjustment_degC'
+ncout_adjustment.cell_methods = 'time: mean (interval: 1 month)'
+ncout_adjustment.fill_value = -1.e+30
+ncout_adjustment[:] = df_merged['adjustment'].values
+
+ncout_adjustment_mean = ncout.createVariable('adjustment_mean', 'f4', ('time',))
+ncout_adjustment_mean.units = '1'
+ncout_adjustment_mean.standard_name = 'adjustment_mean'
+ncout_adjustment_mean.long_name = 'qdjustment_segment_mean_degC'
+ncout_adjustment_mean.cell_methods = 'time: mean (interval: 1 month)'
+ncout_adjustment_mean.fill_value = -1.e+30
+ncout_adjustment_mean[:] = df_merged['segment_mean'].values
+
+# CLOSE: netCDF file
+
+ncout.close()
 
 #==============================================================================
 # PLOTS

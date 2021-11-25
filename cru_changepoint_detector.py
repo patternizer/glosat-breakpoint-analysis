@@ -114,8 +114,9 @@ def changepoint_detector(x,y):
 
     r_diff = np.array( [np.nan] + list(np.diff(r)) )
     max_depth_optimum = np.arange(1,max_depth+1)[ r_diff < 0.001 ][0] - 1
+    if max_depth_optimum <= 2: max_depth_optimum = 3
     #max_depth_optimum = np.arange(1,max_depth+1)[np.array(r/np.max(r)) >= max_r_over_rmax][1] - 1 
-        
+            
     # FIT: LTR model for optimum depth and extract breakpoints
 		
     lt = LinearTreeRegressor(
