@@ -19,6 +19,7 @@ import xarray as xr
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
+from matplotlib.ticker import AutoMinorLocator
 from datetime import datetime
 
 import scipy
@@ -43,6 +44,7 @@ documented_change = np.nan
 
 fontsize = 16 
 use_dark_theme = False
+use_pre_industrial = False
 
 plot_timeseries = True
 plot_difference = True
@@ -138,22 +140,29 @@ def linear_regression_ols(x,y):
 
 ds = xr.open_dataset('DATA/HadCRUT.5.0.1.0.analysis.summary_series.global.monthly.nc', decode_cf=True)
 t_monthly = pd.date_range(start=str(ds.time.dt.year[0].values), periods=len(ds.time), freq='M')
-ts_monthly = ds.tas_mean.values
+if use_pre_industrial == False:
+    ts_monthly = ds.tas_mean.values
+else:
+    ts_monthly = ds.tas_mean.values + 0.36 # shift by approximate mean of 1850-1900
+mask = np.isfinite( t_monthly ) & np.isfinite( ts_monthly ) 
+t_monthly = t_monthly[mask]    
+ts_monthly = ts_monthly[mask]    
 df = pd.DataFrame({'datetime':t_monthly, 'ts_monthly':ts_monthly})
 
 # TRIM: to start of Pandas datetime range
         
 df = df[ (df.datetime.dt.year >= 1678) & (df.datetime.dt.year <= 2020) ].reset_index(drop=True)
-t_monthly = pd.date_range(start=str(df['datetime'].iloc[0]), periods=len(df.ts_monthly), freq='M')     
+t_monthly = df.datetime
+ts_monthly = df.ts_monthly
        
 # COMPUTE: 12-m MA
     
-ts_monthly = df.ts_monthly.rolling(12, center=True).mean().values
+ts_monthly = df.ts_monthly.rolling(24, center=True).mean().values # 2-yr MA (for comparison with UKMO-HC)
     
 # COMPUTE: CUSUM
-     
-t = t_monthly 
-a = ts_monthly  	
+
+t = t_monthly
+a = ts_monthly
 c = np.nancumsum( a )
 x = ( np.arange(len(c)) / len(c) )
 y = c
@@ -167,6 +176,7 @@ else:
 # CALL: cru_changepoint_detector
 #------------------------------------------------------------------------------
 
+depth=3
 y_fit, y_fit_diff, y_fit_diff2, slopes, breakpoints, depth, r, R2adj = cru.changepoint_detector(x, y)
 
 # CALCULATE: intra-breakpoint fragment means
@@ -214,9 +224,12 @@ else:
 #------------------------------------------------------------------------------
 
 if plot_cusum == True:
-	
-	figstr = stationcode + '-' + 'cusum.png'                
 
+	if use_pre_industrial == False:
+		figstr = stationcode + '-' + 'cusum-1961-1990.png'                
+	else:
+		figstr = stationcode + '-' + 'cusum-1851-1900.png'                
+	
 	fig, ax = plt.subplots(figsize=(15,10))
 	plt.plot( t, y, color='blue', ls='-', lw=3, label='CUSUM (O-E)')
 	plt.plot( t, y_fit, color='red', ls='-', lw=2, label='LTR fit')
@@ -224,14 +237,19 @@ if plot_cusum == True:
 	ylimits = plt.ylim()    
 	if ~np.isnan(documented_change): plt.axvline(x=documented_change_datetime, ls='-', lw=2, color='gold', label='Documented change: ' + str(documented_change) )                   
 	for i in range(len(t[(y_fit_diff2>0).ravel()])):
-		if i==0: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
-		else: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2) 
+		if i==0: plt.axvline( t[(y_fit_diff2>0).ravel()].values[i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
+		else: plt.axvline( t[(y_fit_diff2>0).ravel()].values[i], ls='-', lw=1, color=default_color, alpha=0.2) 
 	for i in range(len(breakpoints)):
 		if i==0: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
 		else: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
 	plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
 	ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
 	ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
+	ax.xaxis.set_minor_locator(AutoMinorLocator(2))
+	ax.yaxis.set_minor_locator(AutoMinorLocator(2))    
+	plt.tick_params(which='both', width=1)
+	plt.tick_params(which='minor', length=5, color=default_color)
+	plt.tick_params(axis ='both', which='major', length=10, labelsize=fontsize, color=default_color )    
 	plt.grid(b=None)
 	plt.tick_params(labelsize=fontsize)    
 	plt.xlabel('Year', fontsize=fontsize)
@@ -248,20 +266,25 @@ if plot_cusum == True:
         
 if plot_adjustments == True:
 	    
-    figstr = stationcode + '-' + 'ltr-ols.png'                
+    if use_pre_industrial == False:
+        figstr = stationcode + '-' + 'ltr-ols-1961-1990.png'                
+    else:
+        figstr = stationcode + '-' + 'ltr-ols-1851-1900.png'                
 
     fig, ax = plt.subplots(figsize=(15,10))
-    plt.scatter(t, a, marker='o', fc='blue', ls='-', lw=1, color='blue', alpha=0.5, label='O')
-    plt.scatter(t, a + y_means, marker='o', fc='lightblue', ls='-', lw=1, color='lightblue', alpha=0.5, label='O (detrended)')    
+#    plt.scatter(t, a, marker='o', fc='blue', ls='-', lw=1, color='blue', alpha=0.5, zorder=0, label='O')
+#    plt.scatter(t, a + y_means, marker='o', fc='lightblue', ls='-', lw=1, color='lightblue', alpha=0.5, zorder=0, label='O (detrended)')    
+    plt.plot(t, a, marker='.', mfc='blue', ls='-', lw=1, color='blue', alpha=0.5, zorder=0, label='O')
+    plt.plot(t, a + y_means, marker='.', mfc='lightblue', ls='-', lw=1, color='lightblue', alpha=0.5, zorder=0, label='O (detrended)')    
     for i in range(len(t[(y_fit_diff2>0).ravel()])):
         if i==0:
-            plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
+            plt.axvline( pd.to_datetime( t[(y_fit_diff2>0).ravel()].values[i] ), ls='-', lw=1, color=default_color, alpha=0.2, zorder=1, label='LTR boundary') 
         else:
-            plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2)        
+            plt.axvline( pd.to_datetime( t[(y_fit_diff2>0).ravel()].values[i] ), ls='-', lw=1, color=default_color, zorder=1, alpha=0.2)        
     for i in range(len(breakpoints)):
         if i==0:
-            plt.plot( t[0:breakpoints[i]], np.tile( -np.nanmean(a[0:breakpoints[i]]), breakpoints[i] ), ls='-', lw=3, color='gold')
-            plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
+            plt.plot( t[0:breakpoints[i]], np.tile( -np.nanmean(a[0:breakpoints[i]]), breakpoints[i] ), ls='-', lw=3, color='gold', zorder=2 )
+            plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, zorder=5, label='Breakpoint')
 
             # FIT: OLS to segment
 
@@ -273,11 +296,11 @@ if plot_adjustments == True:
             X = X[mask]
             Y = Y[mask]
             xpred, ypred, slope, intercept = linear_regression_ols(X,Y)
-            plt.scatter(T, ypred, marker='.', fc='red', ls='-', lw=1, color='red', alpha=0.5, label='OLS trend')    
+            plt.scatter(T, ypred, marker='.', fc='red', ls='-', lw=1, color='red', alpha=0.5, zorder=3, label='OLS trend')    
 
         else:
-            plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
-            plt.plot( t[breakpoints[i-1]:breakpoints[i]], np.tile( -np.nanmean(a[breakpoints[i-1]:breakpoints[i]]), breakpoints[i]-breakpoints[i-1] ), ls='-', lw=3, color='gold')
+            plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, zorder=5)    
+            plt.plot( t[breakpoints[i-1]:breakpoints[i]], np.tile( -np.nanmean(a[breakpoints[i-1]:breakpoints[i]]), breakpoints[i]-breakpoints[i-1] ), ls='-', lw=3, color='gold', zorder=3 )
 
             # FIT: OLS to segment
             
@@ -289,10 +312,10 @@ if plot_adjustments == True:
             X = X[mask]
             Y = Y[mask]
             xpred, ypred, slope, intercept = linear_regression_ols(X,Y)
-            plt.scatter(T, ypred, marker='.', fc='red', ls='-', lw=1, color='red', alpha=0.5)    
+            plt.scatter(T, ypred, marker='.', fc='red', ls='-', lw=1, color='red', alpha=0.5, zorder=3 )    
 
         if i==len(breakpoints)-1:
-            plt.plot( t[breakpoints[i]:], np.tile( -np.nanmean(a[breakpoints[i]:]), len(t)-breakpoints[i] ), ls='-', lw=3, color='gold', label='Adjustment')                
+            plt.plot( t[breakpoints[i]:], np.tile( -np.nanmean(a[breakpoints[i]:]), len(t)-breakpoints[i] ), ls='-', lw=3, color='gold', zorder=3, label='Adjustment')                
             
             # FIT: OLS to segment
 
@@ -304,15 +327,23 @@ if plot_adjustments == True:
             X = X[mask]
             Y = Y[mask]
             xpred, ypred, slope, intercept = linear_regression_ols(X,Y)
-            plt.scatter(T, ypred, marker='.', fc='red', ls='-', lw=1, color='red', alpha=0.5)    
+            plt.scatter(T, ypred, marker='.', fc='red', ls='-', lw=1, color='red', alpha=0.5, zorder=3)    
             
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
     ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
     ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
+    ax.xaxis.set_minor_locator(AutoMinorLocator(2))
+    ax.yaxis.set_minor_locator(AutoMinorLocator(5))    
+    plt.tick_params(which='both', width=1)
+    plt.tick_params(which='minor', length=5, color=default_color)
+    plt.tick_params(axis ='both', which='major', length=10, labelsize=fontsize, color=default_color )    
     plt.grid(b=None)
     plt.tick_params(labelsize=fontsize)  
     plt.xlabel('Year', fontsize=fontsize)
-    plt.ylabel(r'Temperature anomaly (from 1961-1990), $^{\circ}$C', fontsize=fontsize)
+    if use_pre_industrial == False:
+        plt.ylabel(r'Temperature anomaly (from 1961-1990), $^{\circ}$C', fontsize=fontsize)
+    else:
+        plt.ylabel(r'Temperature anomaly (from 1851-1900), $^{\circ}$C', fontsize=fontsize)
     plt.title( stationcode + ': depth=' + str(depth) + r' ( BEST ): $\rho$=' + str( f'{r[depth-1]:03f}' ), color=default_color, fontsize=fontsize)      
     fig.legend(loc='lower center', ncol=6, markerscale=1, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)   
     fig.subplots_adjust(left=0.1, bottom=0.15, right=None, top=None, wspace=None, hspace=None)       
