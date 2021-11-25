@@ -333,6 +333,9 @@ ncout.stationlastyear = int(df_compressed.stationlastyear.unique()[0])
 ncout.stationsource = int(df_compressed.stationsource.unique()[0])
 ncout.stationfirstreliable = int(df_compressed.stationfirstreliable.unique()[0])
 
+ncout.stationrmse = np.round( float(rmse) ,6)
+ncout.stationmae = np.round( float(mae), 6)
+
 # CREATE: dimensions
 
 ncout.createDimension( 'time', len(time) )
