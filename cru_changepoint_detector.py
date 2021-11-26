@@ -25,14 +25,17 @@ def changepoint_detector(x,y):
     
     RETURNS:
     
-    y_fit 		: linear tree regression fit at dervied optimal tree depth    
-    y_fit_diff 	: 1st difference of y_fit
-    breakpoints 	: vector of breakpoints (in the same format as x)
-    depth 		: optimal tree depth derived from goodness of fit and correlation
-    r			: vector of Pearson correlation coefficients as a function of tree depth
-    R2adj		: vector of adjusted R^2 as a function of tree depth    
+    y_fit 				: linear tree regression fit at dervied optimal tree depth    
+    y_fit_diff1 		: 1st difference of y_fit
+    y_fit_diff2 		: 2nd difference of y_fit
+    slopes				: vector of LTR segment slope
+    breakpoints 		: vector of breakpoints detected
+    max_depth_optimum 	: optimal tree depth derived from goodness of fit and correlation
+    r					: vector of Pearson correlation coefficients as a function of tree depth
+    R2adj				: vector of adjusted R^2 as a function of tree depth    
     ------------------------------------------------------------------------------
-    CALL SYNTAX: y_fit, y_fit_diff, breakpoints, depth, r, R2adj = changepoint_detector(x, y)
+    CALL SYNTAX: y_fit, y_fit_diff1, y_fit_diff2, slopes, breakpoints, max_depth_optimum, r, R2adj = changepoint_detector(x, y)
+    
     ------------------------------------------------------------------------------
     '''
 
@@ -68,11 +71,11 @@ def changepoint_detector(x,y):
     # SETTINGS (pre-optimised for monthly timeseries)
     #--------------------------------------------------------------------------
 
-    max_depth = 9 # in range [1,20]
-    min_samples_leaf = 120 # 1 decade
-    max_bins = 40 # 1/3 of min_samples_leaf
-    min_separation = 120 # 1 decade
-    min_slope_change = 6 # CUSUM / decade
+    max_depth = 9 			# in range [1,20]
+    min_samples_leaf = 120 	# 1 decade
+    max_bins = 40 			# 1/3 of min_samples_leaf
+    min_separation = 120 	# 1 decade
+    min_slope_change = 6 	# units: CUSUM / decade
 
     # FORMAT: mask and reshape data
 
@@ -115,7 +118,6 @@ def changepoint_detector(x,y):
     r_diff = np.array( [np.nan] + list(np.diff(r)) )
     max_depth_optimum = np.arange(1,max_depth+1)[ r_diff < 0.001 ][0] - 1
     if max_depth_optimum <= 2: max_depth_optimum = 3
-    #max_depth_optimum = np.arange(1,max_depth+1)[np.array(r/np.max(r)) >= max_r_over_rmax][1] - 1 
             
     # FIT: LTR model for optimum depth and extract breakpoints
 		
@@ -138,7 +140,7 @@ def changepoint_detector(x,y):
     slopes_all[:] = y_fit_diff1[:]
     slopes_all[ idx ] = np.nan
     slopes_all[ idx + 1] = np.nan
-    slopes_all = slopes_all * min_separation # slope = Q-sum / decade if min_separation=120                  
+    slopes_all = slopes_all * min_separation # slope = Q-sum / decade ( min_separation=120 )
     slopes = np.zeros(len(y))
     for i in range(len(y)):    
         if i==0:        
@@ -149,10 +151,9 @@ def changepoint_detector(x,y):
             else:            
                 slopes[i] = slopes_all[i]                
     slopes_diff = np.array( [0.0] + list(np.diff(slopes)) )
-#   breakpoints_all = np.arange(len(x))[ np.abs(y_fit_diff1) >= np.abs(np.nanmean(y_fit_diff1)) + 6.0*np.abs(np.nanstd(y_fit_diff1)) ][0:] 
     breakpoints_all = np.arange(len(y))[ np.abs(slopes_diff) > min_slope_change ] - 1     
     breakpoints_diff = np.array( [breakpoints_all[0]] + list( np.diff(breakpoints_all) ) )
-    breakpoints = breakpoints_all[ breakpoints_diff > min_separation ] # decade minimum breakpoint separation
+    breakpoints = breakpoints_all[ breakpoints_diff > min_separation ] # minimum breakpoint separation = decade ( min_separation )
                 
     return y_fit, y_fit_diff1, y_fit_diff2, slopes, breakpoints, max_depth_optimum, r, R2adj           
 #------------------------------------------------------------------------------
