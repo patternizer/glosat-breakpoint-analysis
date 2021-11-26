@@ -15,6 +15,7 @@
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
@@ -62,7 +63,7 @@ plot_adjustments = True
 plot_seasonal = True
 
 nfft = 10                     # decadal smoothing
-
+ 
 #----------------------------------------------------------------------------
 # DARK THEME
 #----------------------------------------------------------------------------
@@ -70,8 +71,6 @@ nfft = 10                     # decadal smoothing
 if use_dark_theme == True:
     
     matplotlib.rcParams['text.usetex'] = False
-#    rcParams['font.family'] = ['DejaVu Sans']
-#    rcParams['font.sans-serif'] = ['Avant Garde']
     rcParams['font.family'] = 'sans-serif'
     rcParams['font.sans-serif'] = ['Avant Garde', 'Lucida Grande', 'Verdana', 'DejaVu Sans' ]
     plt.rc('text',color='white')
@@ -91,8 +90,6 @@ if use_dark_theme == True:
 else:
 
     matplotlib.rcParams['text.usetex'] = False
-#    rcParams['font.family'] = ['DejaVu Sans']
-#    rcParams['font.sans-serif'] = ['Avant Garde']
     rcParams['font.family'] = 'sans-serif'
     rcParams['font.sans-serif'] = ['Avant Garde', 'Lucida Grande', 'Verdana', 'DejaVu Sans' ]
     plt.rc('text',color='black')
@@ -166,8 +163,7 @@ df_compressed = df_temp[ df_temp['stationcode'] == stationcode ].sort_values(by=
 #       's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11', 's12'],
 #      dtype='object')
     
-t_yearly = np.arange( df_compressed.iloc[0].year, df_compressed.iloc[-1].year + 1)
-df_yearly = pd.DataFrame({'year':t_yearly})
+df_yearly = pd.DataFrame({'year': np.arange( 1780, 2021 )}) # 1780-2020 inclusive
 df = df_yearly.merge(df_compressed, how='left', on='year')
 dt = df.groupby('year').mean().iloc[:,0:12]
 dn_array = np.array( df.groupby('year').mean().iloc[:,19:31] )
@@ -183,36 +179,49 @@ da = da[da.year >= 1678].reset_index(drop=True)
 de = de[de.year >= 1678].reset_index(drop=True)
 ds = ds[ds.year >= 1678].reset_index(drop=True)
 
+# EXTRACT: monthly timeseries
+
 ts_monthly = np.array( da.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)
 ex_monthly = np.array( de.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)    
 sd_monthly = np.array( ds.groupby('year').mean().iloc[:,0:12]).ravel().astype(float)                   
-# Solve Y1677-Y2262 Pandas bug with Xarray:        
-# t_monthly = xr.cftime_range(start=str(da['year'].iloc[0]), periods=len(ts_monthly), freq='MS', calendar='noleap')      
+
+# SET: monthly and seasonal time vectors
+
 t_monthly = pd.date_range(start=str(da['year'].iloc[0]), periods=len(ts_monthly), freq='MS')     
+t_seasonal = [ pd.to_datetime( str(da['year'].iloc[i+1])+'-01-01') for i in range(2020-1780) ] # Timestamp('YYYY-01-01 00:00:00')]
+
+# EXTRACT: seasonal components ( D from first year only --> N-1 seasonal estimates )
+
+trim_months = len(ex_monthly)%12
+df = pd.DataFrame({'Tg':ex_monthly[:-1-trim_months]}, index=t_monthly[:-1-trim_months])         
+DJF = ( df[df.index.month==12]['Tg'].values + df[df.index.month==1]['Tg'].values[1:] + df[df.index.month==2]['Tg'].values[1:] ) / 3
+MAM = ( df[df.index.month==3]['Tg'].values[1:] + df[df.index.month==4]['Tg'].values[1:] + df[df.index.month==5]['Tg'].values[1:] ) / 3
+JJA = ( df[df.index.month==6]['Tg'].values[1:] + df[df.index.month==7]['Tg'].values[1:] + df[df.index.month==8]['Tg'].values[1:] ) / 3
+SON = ( df[df.index.month==9]['Tg'].values[1:] + df[df.index.month==10]['Tg'].values[1:] + df[df.index.month==11]['Tg'].values[1:] ) / 3
+ONDJFM = ( df[df.index.month==10]['Tg'].values[1:] + df[df.index.month==11]['Tg'].values[1:] + df[df.index.month==12]['Tg'].values + df[df.index.month==1]['Tg'].values[1:] + df[df.index.month==2]['Tg'].values[1:] + df[df.index.month==3]['Tg'].values[1:] ) / 6
+AMJJAS = ( df[df.index.month==4]['Tg'].values[1:] + df[df.index.month==5]['Tg'].values[1:] + df[df.index.month==6]['Tg'].values[1:] + df[df.index.month==7]['Tg'].values[1:] + df[df.index.month==8]['Tg'].values[1:] + df[df.index.month==9]['Tg'].values[1:] ) / 6
+df_seasonal = pd.DataFrame({'DJF':DJF, 'MAM':MAM, 'JJA':JJA, 'SON':SON, 'ONDJFM':ONDJFM, 'AMJJAS':AMJJAS}, index = t_seasonal)     
+mask = np.isfinite(df_seasonal)
+df_seasonal_fft = pd.DataFrame(index=df_seasonal.index)
+df_seasonal_fft['DJF'] = pd.DataFrame({'DJF':smooth_fft(df_seasonal['DJF'].values[mask['DJF']], nfft)}, index=df_seasonal['DJF'].index[mask['DJF']])
+df_seasonal_fft['MAM'] = pd.DataFrame({'DJF':smooth_fft(df_seasonal['MAM'].values[mask['MAM']], nfft)}, index=df_seasonal['MAM'].index[mask['MAM']])
+df_seasonal_fft['JJA'] = pd.DataFrame({'DJF':smooth_fft(df_seasonal['JJA'].values[mask['JJA']], nfft)}, index=df_seasonal['JJA'].index[mask['JJA']])
+df_seasonal_fft['SON'] = pd.DataFrame({'DJF':smooth_fft(df_seasonal['SON'].values[mask['SON']], nfft)}, index=df_seasonal['SON'].index[mask['SON']])
+df_seasonal_fft['ONDJFM'] = pd.DataFrame({'ONDJFM':smooth_fft(df_seasonal['ONDJFM'].values[mask['ONDJFM']], nfft)}, index=df_seasonal['ONDJFM'].index[mask['ONDJFM']])
+df_seasonal_fft['AMJJAS'] = pd.DataFrame({'AMJJAS':smooth_fft(df_seasonal['AMJJAS'].values[mask['AMJJAS']], nfft)}, index=df_seasonal['AMJJAS'].index[mask['AMJJAS']])
        
 # COMPUTE: 12-m MA
     
 a = pd.Series(ts_monthly).rolling(12, center=True).mean().values
 e = pd.Series(ex_monthly).rolling(12, center=True).mean().values
 s = pd.Series(sd_monthly).rolling(12, center=True).mean().values
-
-# APPLY: mask
-
-mask = np.array(len(ts_monthly) * [True])
-t = t_monthly[mask]
-a = a[mask]
-e = e[mask]
-s = s[mask]
-
-diff_yearly = a - e
+d = a - e # difference
+t = t_monthly
     
 # COMPUTE: CUSUM
         	
-c = np.nancumsum( diff_yearly )
-diff_yearly = diff_yearly
-
-x = ( np.arange(len(c)) / len(c) )
-y = c
+y = np.nancumsum( d )
+x = ( np.arange(len(y)) / len(y) )
 
 if np.isnan(documented_change):
     documented_change_datetime = np.nan
@@ -225,92 +234,52 @@ else:
 
 y_fit, y_fit_diff, y_fit_diff2, slopes, breakpoints, depth, r, R2adj = cru.changepoint_detector(x, y)
 
-# CALCULATE: intra-breakpoint fragment means
+# CALCULATE: inter-breakpoint segment means
         
 y_means = []
-adjustments = []
 for j in range(len(breakpoints)+1):                
     if j == 0:              
-        y_means = y_means + list( np.tile( -np.nanmean(diff_yearly[0:breakpoints[j]]), breakpoints[j] ) ) 
-        adjustment = [ -np.nanmean(diff_yearly[0:breakpoints[j]]) ]
+        if np.isfinite( d[0:breakpoints[j]] ).sum() == 0:
+            y_means = y_means + list( np.tile( np.nan, breakpoints[j] ) ) 
+        else:            
+            y_means = y_means + list( np.tile( -np.nanmean( d[0:breakpoints[j]] ), breakpoints[j] ) ) 
     if (j > 0) & (j<len(breakpoints)):
-        y_means = y_means + list( np.tile( -np.nanmean(diff_yearly[breakpoints[j-1]:breakpoints[j]]), breakpoints[j]-breakpoints[j-1] )) 
-        adjustment = [ -np.nanmean(diff_yearly[breakpoints[j-1]:breakpoints[j]]) ]
+        if np.isfinite( d[breakpoints[j-1]:breakpoints[j]] ).sum() == 0:
+            y_means = y_means + list( np.tile( np.nan, breakpoints[j]-breakpoints[j-1] )) 
+        else:
+            y_means = y_means + list( np.tile( -np.nanmean( d[breakpoints[j-1]:breakpoints[j]] ), breakpoints[j]-breakpoints[j-1] )) 
     if (j == len(breakpoints)):              
-        y_means = y_means + list( np.tile( -np.nanmean(diff_yearly[breakpoints[-1]:]), len(diff_yearly)-breakpoints[-1] ) ) 
-        adjustment = [ -np.nanmean(diff_yearly[breakpoints[-1]:]) ]
-    adjustments.append(adjustment)
-        
+        if np.isfinite( d[breakpoints[-1]:] ).sum() == 0:        
+            y_means = y_means + list( np.tile( np.nan, len(d)-breakpoints[-1] ) )         
+        else:
+            y_means = y_means + list( np.tile( -np.nanmean( d[breakpoints[-1]:] ), len(d)-breakpoints[-1] ) )         
 y_means = np.array( y_means ) 
-adjustments = np.array(adjustments).ravel()
-
-#------------------------------------------------------------------------------
-# WRITE: breakpoints and segment adjustments to CSV
-#------------------------------------------------------------------------------
-
-file_breakpoints = stationcode + '-' + 'breakpoints.csv'    
-file_adjustments = stationcode + '-' + 'adjustments.csv'    
-
-df_breakpoints = pd.DataFrame( {'breakpoint':t[breakpoints]}, index=np.arange(1,len(breakpoints)+1) )
-df_breakpoints.to_csv( file_breakpoints )
-df_adjustments = pd.DataFrame( {'adjustment':adjustments}, index=np.arange(1,len(adjustments)+1) )
-df_adjustments.to_csv( file_adjustments )    
-
-# EXTRACT: seasonal components
-
-trim_months = len(ex_monthly)%12
-df = pd.DataFrame({'Tg':ex_monthly[:-1-trim_months]}, index=t_monthly[:-1-trim_months])         
-t_years = [ pd.to_datetime( str(df.index.year.unique()[i])+'-01-01') for i in range(len(df.index.year.unique())) ][1:] # years
-DJF = ( df[df.index.month==12]['Tg'].values + df[df.index.month==1]['Tg'].values[1:] + df[df.index.month==2]['Tg'].values[1:] ) / 3
-MAM = ( df[df.index.month==3]['Tg'].values[1:] + df[df.index.month==4]['Tg'].values[1:] + df[df.index.month==5]['Tg'].values[1:] ) / 3
-JJA = ( df[df.index.month==6]['Tg'].values[1:] + df[df.index.month==7]['Tg'].values[1:] + df[df.index.month==8]['Tg'].values[1:] ) / 3
-SON = ( df[df.index.month==9]['Tg'].values[1:] + df[df.index.month==10]['Tg'].values[1:] + df[df.index.month==11]['Tg'].values[1:] ) / 3
-ONDJFM = ( df[df.index.month==10]['Tg'].values[1:] + df[df.index.month==11]['Tg'].values[1:] + df[df.index.month==12]['Tg'].values + df[df.index.month==1]['Tg'].values[1:] + df[df.index.month==2]['Tg'].values[1:] + df[df.index.month==3]['Tg'].values[1:] ) / 6
-AMJJAS = ( df[df.index.month==4]['Tg'].values[1:] + df[df.index.month==5]['Tg'].values[1:] + df[df.index.month==6]['Tg'].values[1:] + df[df.index.month==7]['Tg'].values[1:] + df[df.index.month==8]['Tg'].values[1:] + df[df.index.month==9]['Tg'].values[1:] ) / 6
-df_seasonal = pd.DataFrame({'DJF':DJF, 'MAM':MAM, 'JJA':JJA, 'SON':SON, 'ONDJFM':ONDJFM, 'AMJJAS':AMJJAS}, index = t_years)     
-mask = np.isfinite(df_seasonal)
-df_seasonal_fft = pd.DataFrame(index=df_seasonal.index)
-df_seasonal_fft['DJF'] = pd.DataFrame({'DJF':smooth_fft(df_seasonal['DJF'].values[mask['DJF']], nfft)}, index=df_seasonal['DJF'].index[mask['DJF']])
-df_seasonal_fft['MAM'] = pd.DataFrame({'DJF':smooth_fft(df_seasonal['MAM'].values[mask['MAM']], nfft)}, index=df_seasonal['MAM'].index[mask['MAM']])
-df_seasonal_fft['JJA'] = pd.DataFrame({'DJF':smooth_fft(df_seasonal['JJA'].values[mask['JJA']], nfft)}, index=df_seasonal['JJA'].index[mask['JJA']])
-df_seasonal_fft['SON'] = pd.DataFrame({'DJF':smooth_fft(df_seasonal['SON'].values[mask['SON']], nfft)}, index=df_seasonal['SON'].index[mask['SON']])
-df_seasonal_fft['ONDJFM'] = pd.DataFrame({'ONDJFM':smooth_fft(df_seasonal['ONDJFM'].values[mask['ONDJFM']], nfft)}, index=df_seasonal['ONDJFM'].index[mask['ONDJFM']])
-df_seasonal_fft['AMJJAS'] = pd.DataFrame({'AMJJAS':smooth_fft(df_seasonal['AMJJAS'].values[mask['AMJJAS']], nfft)}, index=df_seasonal['AMJJAS'].index[mask['AMJJAS']])
-mask_fft = np.isfinite(df_seasonal_fft)
 
 # STATISTICS
 
-rmse = np.sqrt( np.nanmean( diff_yearly**2.0 ) )
+rmse = np.sqrt( np.nanmean( d**2.0 ) )
 mae = np.nanmean( np.abs( y_means ) )
+
+#------------------------------------------------------------------------------
+# EXPORT: breakpoints and segment adjustments to CSV
+#------------------------------------------------------------------------------
+
 breakpoint_flags = np.array(len(ts_monthly) * [False])
-for j in range(len(breakpoints)):
-    breakpoint_flags[breakpoints[j]] = True
-        
-df = pd.DataFrame( {'time':t, 'breakpoint':breakpoint_flags, 'adjustment':-1.0*diff_yearly, 'segment_mean':y_means}, index=np.arange(len(t)) )          
+for j in range(len(breakpoints)): breakpoint_flags[breakpoints[j]] = True        
 
-# MERGE: into full GloSAT timeframe container: 1780-2020 (inclusive)
-
-#t_monthly = pd.date_range(start='01-01-1780', end='31-12-2020', freq='M')     
-t_monthly = pd.date_range(start='1780', end='2021', freq='MS')[0:-1]
-
-df_full = pd.DataFrame({'time':t_monthly})
-df_full['breakpoint'] = False
-df_full['adjustment'] = np.nan
-df_full['segment_mean'] = np.nan
-df1 = df_full
-df2 = df
-var = 'time'
-df_merged = merge_fix_cols( df1, df2, var)
-
-time = df_merged['time']
+file_breakpoints = stationcode + '-' + 'breakpoints.csv'    
+df_breakpoints = pd.DataFrame( {'time':t, 'breakpoint':breakpoint_flags, 'adjustment':-1.0*d, 'segment_mean':y_means}, index=np.arange(len(t)) )          
+df_breakpoints.to_csv( file_breakpoints )
 
 #------------------------------------------------------------------------------
 # EXPORT: data to netCDF-4
 #------------------------------------------------------------------------------
             
 # OPEN: netCDF file for writing
-    
-ncout = Dataset(stationcode + '-' + 'breakpoints.nc', 'w', format='NETCDF4')
+
+nc_filename = stationcode + '-' + 'breakpoints.nc'  
+if os.path.exists(nc_filename): os.remove(nc_filename)
+ncout = Dataset( nc_filename, 'w', format='NETCDF4')
     
 # ADD: // global attributes
     
@@ -332,13 +301,12 @@ ncout.stationfirstyear = int(df_compressed.stationfirstyear.unique()[0])
 ncout.stationlastyear = int(df_compressed.stationlastyear.unique()[0])
 ncout.stationsource = int(df_compressed.stationsource.unique()[0])
 ncout.stationfirstreliable = int(df_compressed.stationfirstreliable.unique()[0])
-
 ncout.stationrmse = np.round( float(rmse) ,6)
 ncout.stationmae = np.round( float(mae), 6)
 
 # CREATE: dimensions
 
-ncout.createDimension( 'time', len(time) )
+ncout.createDimension( 'time', len(df_breakpoints.time) )
 
 # SAVE: data to variables
     
@@ -358,7 +326,7 @@ ncout.createDimension( 'time', len(time) )
 ncout_time = ncout.createVariable('time', 'i4', ('time',))
 units = 'months since 1850-01-01 00:00:00'
 ncout_time.setncattr('unit',units)
-ncout_time[:] = [ date2num(time[i], units, calendar='360_day') for i in range(len(time)) ]
+ncout_time[:] = [ date2num(df_breakpoints.time[i], units, calendar='360_day') for i in range(len(df_breakpoints.time)) ]
 # calendar: 'standard’, ‘gregorian’, ‘proleptic_gregorian’ ‘noleap’, ‘365_day’, ‘360_day’, ‘julian’, ‘all_leap’, ‘366_day’
     
 ncout_breakpoint = ncout.createVariable('breakpoint_flag', 'f4', ('time',))
@@ -367,7 +335,7 @@ ncout_breakpoint.standard_name = 'breakpoint_flag'
 ncout_breakpoint.long_name = 'breakpoint_flag_boolean'
 ncout_breakpoint.cell_methods = 'time: mean (interval: 1 month)'
 ncout_breakpoint.fill_value = -1.e+30
-ncout_breakpoint[:] = df_merged['breakpoint'].values
+ncout_breakpoint[:] = df_breakpoints['breakpoint'].values
 
 ncout_adjustment = ncout.createVariable('adjustment', 'f4', ('time',))
 ncout_adjustment.units = '1'
@@ -375,7 +343,7 @@ ncout_adjustment.standard_name = 'adjustment'
 ncout_adjustment.long_name = 'qdjustment_degC'
 ncout_adjustment.cell_methods = 'time: mean (interval: 1 month)'
 ncout_adjustment.fill_value = -1.e+30
-ncout_adjustment[:] = df_merged['adjustment'].values
+ncout_adjustment[:] = df_breakpoints['adjustment'].values
 
 ncout_adjustment_mean = ncout.createVariable('adjustment_mean', 'f4', ('time',))
 ncout_adjustment_mean.units = '1'
@@ -383,7 +351,7 @@ ncout_adjustment_mean.standard_name = 'adjustment_mean'
 ncout_adjustment_mean.long_name = 'qdjustment_segment_mean_degC'
 ncout_adjustment_mean.cell_methods = 'time: mean (interval: 1 month)'
 ncout_adjustment_mean.fill_value = -1.e+30
-ncout_adjustment_mean[:] = df_merged['segment_mean'].values
+ncout_adjustment_mean[:] = df_breakpoints['segment_mean'].values
 
 # CLOSE: netCDF file
 
@@ -411,6 +379,7 @@ if plot_timeseries == True:
     plt.scatter(t, a, marker='o', fc='blue', ls='-', lw=1, color='blue', alpha=0.5, label='O')
     plt.scatter(t, e, marker='o', fc='red', ls='-', lw=1, color='red', alpha=0.5, label='E')         
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
+    plt.xlim(t[0],t[-1])
     ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
     ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
     plt.grid(b=None)
@@ -433,7 +402,7 @@ if plot_difference == True:
                  
     fig, ax = plt.subplots(figsize=(15,10))
     plt.fill_between(t, -s, s, color='lightgrey', alpha=0.5, label='uncertainty')
-    plt.scatter(t, diff_yearly, marker='o', fc='lightblue', ls='-', lw=1, color='lightblue', alpha=0.5, label='O-E')
+    plt.scatter(t, d, marker='o', fc='lightblue', ls='-', lw=1, color='lightblue', alpha=0.5, label='O-E')
     for i in range(len(t[(y_fit_diff2>0).ravel()])):
         if i==0:
             plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
@@ -445,6 +414,7 @@ if plot_difference == True:
         else:
             plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
+    plt.xlim(t[0],t[-1])    
     ylimits = np.array(plt.ylim())
     plt.ylim( -ylimits.max(), ylimits.max() )
     ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
@@ -465,32 +435,33 @@ if plot_difference == True:
 
 if plot_cusum == True:
 	
-	figstr = stationcode + '-' + 'cusum.png'                
+    figstr = stationcode + '-' + 'cusum.png'                
 
-	fig, ax = plt.subplots(figsize=(15,10))
-	plt.plot( t, y, color='blue', ls='-', lw=3, label='CUSUM (O-E)')
-	plt.plot( t, y_fit, color='red', ls='-', lw=2, label='LTR fit')
-	plt.fill_between( t, slopes, 0, color='lightblue', alpha=0.5, label='CUSUM/decade' )    
-	ylimits = plt.ylim()    
-	if ~np.isnan(documented_change): plt.axvline(x=documented_change_datetime, ls='-', lw=2, color='gold', label='Documented change: ' + str(documented_change) )                   
-	for i in range(len(t[(y_fit_diff2>0).ravel()])):
-		if i==0: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
-		else: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2) 
-	for i in range(len(breakpoints)):
-		if i==0: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
-		else: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
-	plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
-	ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
-	ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
-	plt.grid(b=None)
-	plt.tick_params(labelsize=fontsize)    
-	plt.xlabel('Year', fontsize=fontsize)
-	plt.ylabel(r'CUSUM (O-E), $^{\circ}$C', fontsize=fontsize)
-	plt.title( stationcode + ': depth=' + str(depth) + r' ( BEST ): $\rho$=' + str( f'{r[depth-1]:03f}' ), color=default_color, fontsize=fontsize)      
-	fig.legend(loc='lower center', ncol=5, markerscale=3, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)       
-	fig.subplots_adjust(left=0.1, bottom=0.15, right=None, top=None, wspace=None, hspace=None)       
-	plt.savefig(figstr, dpi=300)
-	plt.close('all')    
+    fig, ax = plt.subplots(figsize=(15,10))
+    plt.plot( t, y, color='blue', ls='-', lw=3, label='CUSUM (O-E)')
+    plt.plot( t, y_fit, color='red', ls='-', lw=2, label='LTR fit')
+    plt.fill_between( t, slopes, 0, color='lightblue', alpha=0.5, label='CUSUM/decade' )    
+    ylimits = plt.ylim()    
+    if ~np.isnan(documented_change): plt.axvline(x=documented_change_datetime, ls='-', lw=2, color='gold', label='Documented change: ' + str(documented_change) )                   
+    for i in range(len(t[(y_fit_diff2>0).ravel()])):
+        if i==0: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
+        else: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2) 
+    for i in range(len(breakpoints)):
+        if i==0: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
+        else: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
+    plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
+    plt.xlim(t[0],t[-1])
+    ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
+    ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
+    plt.grid(b=None)
+    plt.tick_params(labelsize=fontsize)    
+    plt.xlabel('Year', fontsize=fontsize)
+    plt.ylabel(r'CUSUM (O-E), $^{\circ}$C', fontsize=fontsize)
+    plt.title( stationcode + ': depth=' + str(depth) + r' ( BEST ): $\rho$=' + str( f'{r[depth-1]:03f}' ), color=default_color, fontsize=fontsize)      
+    fig.legend(loc='lower center', ncol=5, markerscale=3, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)       
+    fig.subplots_adjust(left=0.1, bottom=0.15, right=None, top=None, wspace=None, hspace=None)       
+    plt.savefig(figstr, dpi=300)
+    plt.close('all')    
 
 #------------------------------------------------------------------------------
 # PLOT: O, O(adjusted) and E with breakpoints and adjustments
@@ -511,14 +482,18 @@ if plot_adjustments == True:
             plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2) 
     for i in range(len(breakpoints)):
         if i==0:
-            plt.plot( t[0:breakpoints[i]], np.tile( -np.nanmean(diff_yearly[0:breakpoints[i]]), breakpoints[i] ), ls='-', lw=3, color='gold')
+            if np.isfinite( d[0:breakpoints[i]] ).sum() > 0:
+                plt.plot( t[0:breakpoints[i]], np.tile( -np.nanmean( d[0:breakpoints[i]] ), breakpoints[i] ), ls='-', lw=3, color='gold')
             plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
         else:
-            plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
-            plt.plot( t[breakpoints[i-1]:breakpoints[i]], np.tile( -np.nanmean(diff_yearly[breakpoints[i-1]:breakpoints[i]]), breakpoints[i]-breakpoints[i-1] ), ls='-', lw=3, color='gold')
+            if np.isfinite( d[breakpoints[i-1]:breakpoints[i]] ).sum() > 0:
+                plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
+            plt.plot( t[breakpoints[i-1]:breakpoints[i]], np.tile( -np.nanmean( d[breakpoints[i-1]:breakpoints[i]] ), breakpoints[i]-breakpoints[i-1] ), ls='-', lw=3, color='gold')
         if i==len(breakpoints)-1:
-            plt.plot( t[breakpoints[i]:], np.tile( -np.nanmean(diff_yearly[breakpoints[i]:]), len(t)-breakpoints[i] ), ls='-', lw=3, color='gold', label='Adjustment')                
-    plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
+            if np.isfinite( d[breakpoints[i]:] ).sum() > 0:
+                plt.plot( t[breakpoints[i]:], np.tile( -np.nanmean( d[breakpoints[i]:] ), len(t)-breakpoints[i] ), ls='-', lw=3, color='gold', label='Adjustment')                
+    plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)    
+    plt.xlim(t[0],t[-1])                
     ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
     ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
     plt.grid(b=None)
@@ -550,7 +525,8 @@ if plot_seasonal == True:
     for i in range(len(breakpoints)):
         if i==0: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
         else: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
-    plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
+    plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)      
+    plt.xlim(t[0],t[-1])              
     ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
     ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
     plt.grid(b=None)
