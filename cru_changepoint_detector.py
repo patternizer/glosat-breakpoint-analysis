@@ -151,9 +151,12 @@ def changepoint_detector(x,y):
             else:            
                 slopes[i] = slopes_all[i]                
     slopes_diff = np.array( [0.0] + list(np.diff(slopes)) )
-    breakpoints_all = np.arange(len(y))[ np.abs(slopes_diff) > min_slope_change ] - 1     
-    breakpoints_diff = np.array( [breakpoints_all[0]] + list( np.diff(breakpoints_all) ) )
-    breakpoints = breakpoints_all[ breakpoints_diff > min_separation ] # minimum breakpoint separation = decade ( min_separation )
+    breakpoints_all = np.arange(len(y))[ np.abs(slopes_diff) > min_slope_change ] - 1    
+    if len(breakpoints_all) > 0:
+        breakpoints_diff = np.array( [breakpoints_all[0]] + list( np.diff(breakpoints_all) ) )
+        breakpoints = breakpoints_all[ breakpoints_diff > min_separation ] # minimum breakpoint separation = decade ( min_separation )
+    else:
+        breakpoints = []
                 
     return y_fit, y_fit_diff1, y_fit_diff2, slopes, breakpoints, max_depth_optimum, r, R2adj           
 #------------------------------------------------------------------------------

@@ -35,7 +35,7 @@ import cru_changepoint_detector as cru # CRU changepoint detector
 # SETTINGS
 #-----------------------------------------------------------------------------
 
-stationcode = '037401'     # HadCET
+#stationcode = '037401'     # HadCET
 #stationcode = '103810'     # Berlin-Dahlem (breakpoint: 1908)
 #stationcode = '685880'     # Durban/Louis Botha (breakpoint: 1939)
 #stationcode = '024581'     # Uppsala
@@ -44,6 +44,10 @@ stationcode = '037401'     # HadCET
 #stationcode = '260630'     # De Bilt
 #stationcode = '688177'     # Cape Town
 #stationcode = '619930'     # Pamplemousses
+
+stationcode = '038940'     # Guernsey
+
+
 
 #if stationcode == '103810':
 #    documented_change = 1908
