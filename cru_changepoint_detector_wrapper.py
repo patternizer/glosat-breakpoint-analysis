@@ -44,10 +44,7 @@ import cru_changepoint_detector as cru # CRU changepoint detector
 #stationcode = '260630'     # De Bilt
 #stationcode = '688177'     # Cape Town
 #stationcode = '619930'     # Pamplemousses
-
 stationcode = '038940'     # Guernsey
-
-
 
 #if stationcode == '103810':
 #    documented_change = 1908
@@ -59,6 +56,7 @@ documented_change = np.nan
 
 fontsize = 16 
 use_dark_theme = False
+use_smoothing = True
 
 plot_timeseries = True
 plot_difference = True
@@ -92,24 +90,10 @@ if use_dark_theme == True:
     plt.rc('savefig',facecolor='black')
     
 else:
-
-    matplotlib.rcParams['text.usetex'] = False
-    rcParams['font.family'] = 'sans-serif'
-    rcParams['font.sans-serif'] = ['Avant Garde', 'Lucida Grande', 'Verdana', 'DejaVu Sans' ]
-    plt.rc('text',color='black')
-    plt.rc('lines',color='black')
-    plt.rc('patch',edgecolor='black')
-    plt.rc('grid',color='lightgray')
-    plt.rc('xtick',color='black')
-    plt.rc('ytick',color='black')
-    plt.rc('axes',labelcolor='black')
-    plt.rc('axes',facecolor='white')    
-    plt.rc('axes',edgecolor='black')
-    plt.rc('figure',facecolor='white')
-    plt.rc('figure',edgecolor='white')
-    plt.rc('savefig',edgecolor='white')
-    plt.rc('savefig',facecolor='white')
-
+        
+    print('Using Seaborn graphics ... ')
+    import seaborn as sns; sns.set()
+    
 # Calculate current time
 
 now = datetime.now()
@@ -216,9 +200,18 @@ df_seasonal_fft['AMJJAS'] = pd.DataFrame({'AMJJAS':smooth_fft(df_seasonal['AMJJA
        
 # COMPUTE: 12-m MA
     
-a = pd.Series(ts_monthly).rolling(12, center=True).mean().values
-e = pd.Series(ex_monthly).rolling(12, center=True).mean().values
-s = pd.Series(sd_monthly).rolling(12, center=True).mean().values
+if use_smoothing == True:
+    
+    a = pd.Series(ts_monthly).rolling(12, center=True).mean().values
+    e = pd.Series(ex_monthly).rolling(12, center=True).mean().values
+    s = pd.Series(sd_monthly).rolling(12, center=True).mean().values
+
+else:
+
+    a = ts_monthly
+    e = ex_monthly
+    s = sd_monthly
+    
 d = a - e # difference
 t = t_monthly
     
@@ -239,25 +232,31 @@ else:
 y_fit, y_fit_diff, y_fit_diff2, slopes, breakpoints, depth, r, R2adj = cru.changepoint_detector(x, y)
 
 # CALCULATE: inter-breakpoint segment means
-        
-y_means = []
-for j in range(len(breakpoints)+1):                
-    if j == 0:              
-        if np.isfinite( d[0:breakpoints[j]] ).sum() == 0:
-            y_means = y_means + list( np.tile( np.nan, breakpoints[j] ) ) 
-        else:            
-            y_means = y_means + list( np.tile( -np.nanmean( d[0:breakpoints[j]] ), breakpoints[j] ) ) 
-    if (j > 0) & (j<len(breakpoints)):
-        if np.isfinite( d[breakpoints[j-1]:breakpoints[j]] ).sum() == 0:
-            y_means = y_means + list( np.tile( np.nan, breakpoints[j]-breakpoints[j-1] )) 
-        else:
-            y_means = y_means + list( np.tile( -np.nanmean( d[breakpoints[j-1]:breakpoints[j]] ), breakpoints[j]-breakpoints[j-1] )) 
-    if (j == len(breakpoints)):              
-        if np.isfinite( d[breakpoints[-1]:] ).sum() == 0:        
-            y_means = y_means + list( np.tile( np.nan, len(d)-breakpoints[-1] ) )         
-        else:
-            y_means = y_means + list( np.tile( -np.nanmean( d[breakpoints[-1]:] ), len(d)-breakpoints[-1] ) )         
-y_means = np.array( y_means ) 
+
+if len(breakpoints) > 0:
+    
+    y_means = []
+    for j in range(len(breakpoints)+1):                
+        if j == 0:              
+            if np.isfinite( d[0:breakpoints[j]] ).sum() == 0:
+                y_means = y_means + list( np.tile( np.nan, breakpoints[j] ) ) 
+            else:            
+                y_means = y_means + list( np.tile( -np.nanmean( d[0:breakpoints[j]] ), breakpoints[j] ) ) 
+        if (j > 0) & (j<len(breakpoints)):
+            if np.isfinite( d[breakpoints[j-1]:breakpoints[j]] ).sum() == 0:
+                y_means = y_means + list( np.tile( np.nan, breakpoints[j]-breakpoints[j-1] )) 
+            else:
+                y_means = y_means + list( np.tile( -np.nanmean( d[breakpoints[j-1]:breakpoints[j]] ), breakpoints[j]-breakpoints[j-1] )) 
+        if (j == len(breakpoints)):              
+            if np.isfinite( d[breakpoints[-1]:] ).sum() == 0:        
+                y_means = y_means + list( np.tile( np.nan, len(d)-breakpoints[-1] ) )         
+            else:
+                y_means = y_means + list( np.tile( -np.nanmean( d[breakpoints[-1]:] ), len(d)-breakpoints[-1] ) )         
+    y_means = np.array( y_means ) 
+
+else:
+	
+    y_means = np.zeros( len(t_monthly) )	
 
 # STATISTICS
 
@@ -274,6 +273,7 @@ for j in range(len(breakpoints)): breakpoint_flags[breakpoints[j]] = True
 file_breakpoints = stationcode + '-' + 'breakpoints.csv'    
 df_breakpoints = pd.DataFrame( {'time':t, 'breakpoint':breakpoint_flags, 'adjustment':-1.0*d, 'segment_mean':y_means}, index=np.arange(len(t)) )          
 df_breakpoints.to_csv( file_breakpoints )
+print(t[breakpoints])
 
 #------------------------------------------------------------------------------
 # EXPORT: data to netCDF-4
@@ -384,9 +384,9 @@ if plot_timeseries == True:
     plt.scatter(t, e, marker='o', fc='red', ls='-', lw=1, color='red', alpha=0.5, label='E')         
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
     plt.xlim(t[0],t[-1])
-    ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
-    ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
-    plt.grid(b=None)
+    ax.xaxis.grid(visible=None, which='major', color='none', linestyle='-')
+    ax.yaxis.grid(visible=None, which='major', color='none', linestyle='-')
+    plt.grid(visible=None)
     plt.tick_params(labelsize=fontsize)  
     plt.xlabel('Year', fontsize=fontsize)
     plt.ylabel(r'Temperature anomaly (from 1961-1990), $^{\circ}$C', fontsize=fontsize)
@@ -414,16 +414,16 @@ if plot_difference == True:
             plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2) 
     for i in range(len(breakpoints)):
         if i==0:
-            plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
+            plt.axvline( t[breakpoints[i]], ls='dashed', lw=3, color=default_color, label='Breakpoint')
         else:
-            plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
+            plt.axvline( t[breakpoints[i]], ls='dashed', lw=3, color=default_color)    
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
     plt.xlim(t[0],t[-1])    
     ylimits = np.array(plt.ylim())
     plt.ylim( -ylimits.max(), ylimits.max() )
-    ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
-    ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
-    plt.grid(b=None)
+    ax.xaxis.grid(visible=None, which='major', color='none', linestyle='-')
+    ax.yaxis.grid(visible=None, which='major', color='none', linestyle='-')
+    plt.grid(visible=None)
     plt.tick_params(labelsize=fontsize)  
     plt.xlabel('Year', fontsize=fontsize)
     plt.ylabel(r'Anomaly difference, $^{\circ}$C', fontsize=fontsize)
@@ -451,13 +451,13 @@ if plot_cusum == True:
         if i==0: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
         else: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2) 
     for i in range(len(breakpoints)):
-        if i==0: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
-        else: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
+        if i==0: plt.axvline( t[breakpoints[i]], ls='dashed', lw=3, color=default_color, label='Breakpoint')
+        else: plt.axvline( t[breakpoints[i]], ls='dashed', lw=3, color=default_color)    
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
     plt.xlim(t[0],t[-1])
-    ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
-    ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
-    plt.grid(b=None)
+    ax.xaxis.grid(visible=None, which='major', color='none', linestyle='-')
+    ax.yaxis.grid(visible=None, which='major', color='none', linestyle='-')
+    plt.grid(visible=None)
     plt.tick_params(labelsize=fontsize)    
     plt.xlabel('Year', fontsize=fontsize)
     plt.ylabel(r'CUSUM (O-E), $^{\circ}$C', fontsize=fontsize)
@@ -488,19 +488,19 @@ if plot_adjustments == True:
         if i==0:
             if np.isfinite( d[0:breakpoints[i]] ).sum() > 0:
                 plt.plot( t[0:breakpoints[i]], np.tile( -np.nanmean( d[0:breakpoints[i]] ), breakpoints[i] ), ls='-', lw=3, color='gold')
-            plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
+            plt.axvline( t[breakpoints[i]], ls='dashed', lw=3, color=default_color, label='Breakpoint')
         else:
             if np.isfinite( d[breakpoints[i-1]:breakpoints[i]] ).sum() > 0:
-                plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
+                plt.axvline( t[breakpoints[i]], ls='dashed', lw=3, color=default_color)    
             plt.plot( t[breakpoints[i-1]:breakpoints[i]], np.tile( -np.nanmean( d[breakpoints[i-1]:breakpoints[i]] ), breakpoints[i]-breakpoints[i-1] ), ls='-', lw=3, color='gold')
         if i==len(breakpoints)-1:
             if np.isfinite( d[breakpoints[i]:] ).sum() > 0:
                 plt.plot( t[breakpoints[i]:], np.tile( -np.nanmean( d[breakpoints[i]:] ), len(t)-breakpoints[i] ), ls='-', lw=3, color='gold', label='Adjustment')                
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)    
     plt.xlim(t[0],t[-1])                
-    ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
-    ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
-    plt.grid(b=None)
+    ax.xaxis.grid(visible=None, which='major', color='none', linestyle='-')
+    ax.yaxis.grid(visible=None, which='major', color='none', linestyle='-')
+    plt.grid(visible=None)
     plt.tick_params(labelsize=fontsize)  
     plt.xlabel('Year', fontsize=fontsize)
     plt.ylabel(r'Temperature anomaly (from 1961-1990), $^{\circ}$C', fontsize=fontsize)
@@ -527,13 +527,13 @@ if plot_seasonal == True:
         if i==0: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
         else: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2) 
     for i in range(len(breakpoints)):
-        if i==0: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
-        else: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
+        if i==0: plt.axvline( t[breakpoints[i]], ls='dashed', lw=3, color=default_color, label='Breakpoint')
+        else: plt.axvline( t[breakpoints[i]], ls='dashed', lw=3, color=default_color)    
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)      
     plt.xlim(t[0],t[-1])              
-    ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
-    ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
-    plt.grid(b=None)
+    ax.xaxis.grid(visible=None, which='major', color='none', linestyle='-')
+    ax.yaxis.grid(visible=None, which='major', color='none', linestyle='-')
+    plt.grid(visible=None)
     plt.tick_params(labelsize=fontsize)  
     plt.xlabel('Year', fontsize=fontsize)
     plt.ylabel(r'Temperature anomaly (from 1961-1990), $^{\circ}$C', fontsize=fontsize)
