@@ -5,8 +5,8 @@
 # PROGRAM: cru_changepoint_detector_detrender.py
 #------------------------------------------------------------------------------
 #
-# Version 0.1
-# 21 November, 2021
+# Version 0.2
+# 17 Deceember, 2021
 # Michael Taylor
 # https://patternizer.github.io
 # patternizer AT gmail DOT com
@@ -29,9 +29,7 @@ import statsmodels.api as sm
 from lineartree import LinearTreeClassifier, LinearTreeRegressor
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
 
-
 #----------------------------------------------------------------------------------
-import filter_cru_dft as cru_filter # CRU DFT filter
 import cru_changepoint_detector as cru # CRU changepoint detector
 #----------------------------------------------------------------------------------
 
@@ -39,20 +37,14 @@ import cru_changepoint_detector as cru # CRU changepoint detector
 # SETTINGS
 #-----------------------------------------------------------------------------
 
-stationcode = 'HadCRUT5'     # 
-documented_change = np.nan
+stationcode = 'HadCRUT5'     
 
 fontsize = 16 
 use_dark_theme = False
 use_pre_industrial = False
 
-plot_timeseries = True
-plot_difference = True
 plot_cusum = True
 plot_adjustments = True
-plot_seasonal = True
-
-nfft = 10                     # decadal smoothing
 
 #----------------------------------------------------------------------------
 # DARK THEME
@@ -61,8 +53,6 @@ nfft = 10                     # decadal smoothing
 if use_dark_theme == True:
     
     matplotlib.rcParams['text.usetex'] = False
-#    rcParams['font.family'] = ['DejaVu Sans']
-#    rcParams['font.sans-serif'] = ['Avant Garde']
     rcParams['font.family'] = 'sans-serif'
     rcParams['font.sans-serif'] = ['Avant Garde', 'Lucida Grande', 'Verdana', 'DejaVu Sans' ]
     plt.rc('text',color='white')
@@ -81,24 +71,8 @@ if use_dark_theme == True:
     
 else:
 
-    matplotlib.rcParams['text.usetex'] = False
-#    rcParams['font.family'] = ['DejaVu Sans']
-#    rcParams['font.sans-serif'] = ['Avant Garde']
-    rcParams['font.family'] = 'sans-serif'
-    rcParams['font.sans-serif'] = ['Avant Garde', 'Lucida Grande', 'Verdana', 'DejaVu Sans' ]
-    plt.rc('text',color='black')
-    plt.rc('lines',color='black')
-    plt.rc('patch',edgecolor='black')
-    plt.rc('grid',color='lightgray')
-    plt.rc('xtick',color='black')
-    plt.rc('ytick',color='black')
-    plt.rc('axes',labelcolor='black')
-    plt.rc('axes',facecolor='white')    
-    plt.rc('axes',edgecolor='black')
-    plt.rc('figure',facecolor='white')
-    plt.rc('figure',edgecolor='white')
-    plt.rc('savefig',edgecolor='white')
-    plt.rc('savefig',facecolor='white')
+    print('Using Seaborn graphics ... ')
+    import seaborn as sns; sns.set()
 
 # Calculate current time
 
@@ -111,13 +85,6 @@ titletime = str(currentdy) + '/' + currentmn + '/' + currentyr
 #----------------------------------------------------------------------------------
 # METHODS
 #----------------------------------------------------------------------------------
-
-def smooth_fft(x, span):  
-    
-    y_lo, y_hi, zvarlo, zvarhi, fc, pctl = cru_filter.cru_filter_dft(x, span)    
-    x_filtered = y_lo
-
-    return x_filtered
     
 def linear_regression_ols(x,y):
     
@@ -167,11 +134,6 @@ c = np.nancumsum( a )
 x = ( np.arange(len(c)) / len(c) )
 y = c
 
-if np.isnan(documented_change):
-    documented_change_datetime = np.nan
-else:        
-    documented_change_datetime = pd.to_datetime('01-01-'+str(documented_change),format='%d-%m-%Y')
-
 #------------------------------------------------------------------------------
 # CALL: cru_changepoint_detector
 #------------------------------------------------------------------------------
@@ -202,8 +164,12 @@ adjustments = np.array(adjustments).ravel()
 # WRITE: breakpoints and segment adjustments to CSV
 #------------------------------------------------------------------------------
 
-file_breakpoints = stationcode + '-' + 'breakpoints.csv'    
-file_adjustments = stationcode + '-' + 'adjustments.csv'    
+if use_pre_industrial == False:
+    file_breakpoints = stationcode + '-' + 'breakpoints-1961-1990.csv'    
+    file_adjustments = stationcode + '-' + 'adjustments-1961-1990.csv'    
+else:
+    file_breakpoints = stationcode + '-' + 'breakpoints-1851-1900.csv'    
+    file_adjustments = stationcode + '-' + 'adjustments-1851-1900.csv'    
 
 df_breakpoints = pd.DataFrame( {'breakpoint':t[breakpoints]}, index=np.arange(1,len(breakpoints)+1) )
 df_breakpoints.to_csv( file_breakpoints )
@@ -235,7 +201,6 @@ if plot_cusum == True:
 	plt.plot( t, y_fit, color='red', ls='-', lw=2, label='LTR fit')
 	plt.fill_between( t, slopes, 0, color='lightblue', alpha=0.5, label='CUSUM/decade' )    
 	ylimits = plt.ylim()    
-	if ~np.isnan(documented_change): plt.axvline(x=documented_change_datetime, ls='-', lw=2, color='gold', label='Documented change: ' + str(documented_change) )                   
 	for i in range(len(t[(y_fit_diff2>0).ravel()])):
 		if i==0: plt.axvline( t[(y_fit_diff2>0).ravel()].values[i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
 		else: plt.axvline( t[(y_fit_diff2>0).ravel()].values[i], ls='-', lw=1, color=default_color, alpha=0.2) 
@@ -243,14 +208,11 @@ if plot_cusum == True:
 		if i==0: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
 		else: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
 	plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
-	ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
-	ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
 	ax.xaxis.set_minor_locator(AutoMinorLocator(2))
 	ax.yaxis.set_minor_locator(AutoMinorLocator(2))    
 	plt.tick_params(which='both', width=1)
 	plt.tick_params(which='minor', length=5, color=default_color)
 	plt.tick_params(axis ='both', which='major', length=10, labelsize=fontsize, color=default_color )    
-	plt.grid(b=None)
 	plt.tick_params(labelsize=fontsize)    
 	plt.xlabel('Year', fontsize=fontsize)
 	plt.ylabel(r'CUSUM (O-E), $^{\circ}$C', fontsize=fontsize)
@@ -272,8 +234,6 @@ if plot_adjustments == True:
         figstr = stationcode + '-' + 'ltr-ols-1851-1900.png'                
 
     fig, ax = plt.subplots(figsize=(15,10))
-#    plt.scatter(t, a, marker='o', fc='blue', ls='-', lw=1, color='blue', alpha=0.5, zorder=0, label='O')
-#    plt.scatter(t, a + y_means, marker='o', fc='lightblue', ls='-', lw=1, color='lightblue', alpha=0.5, zorder=0, label='O (detrended)')    
     plt.plot(t, a, marker='.', mfc='blue', ls='-', lw=1, color='blue', alpha=0.5, zorder=0, label='O')
     plt.plot(t, a + y_means, marker='.', mfc='lightblue', ls='-', lw=1, color='lightblue', alpha=0.5, zorder=0, label='O (detrended)')    
     for i in range(len(t[(y_fit_diff2>0).ravel()])):
@@ -330,14 +290,11 @@ if plot_adjustments == True:
             plt.scatter(T, ypred, marker='.', fc='red', ls='-', lw=1, color='red', alpha=0.5, zorder=3)    
             
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
-    ax.xaxis.grid(b=None, which='major', color='none', linestyle='-')
-    ax.yaxis.grid(b=None, which='major', color='none', linestyle='-')
     ax.xaxis.set_minor_locator(AutoMinorLocator(2))
     ax.yaxis.set_minor_locator(AutoMinorLocator(5))    
     plt.tick_params(which='both', width=1)
     plt.tick_params(which='minor', length=5, color=default_color)
     plt.tick_params(axis ='both', which='major', length=10, labelsize=fontsize, color=default_color )    
-    plt.grid(b=None)
     plt.tick_params(labelsize=fontsize)  
     plt.xlabel('Year', fontsize=fontsize)
     if use_pre_industrial == False:
