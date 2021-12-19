@@ -80,8 +80,6 @@ def calculate_adjustments(stationcode):
     if use_dark_theme == True:
     
         matplotlib.rcParams['text.usetex'] = False
-    #    rcParams['font.family'] = ['DejaVu Sans']
-    #    rcParams['font.sans-serif'] = ['Avant Garde']
         rcParams['font.family'] = 'sans-serif'
         rcParams['font.sans-serif'] = ['Avant Garde', 'Lucida Grande', 'Verdana', 'DejaVu Sans' ]
         plt.rc('text',color='white')
@@ -100,24 +98,8 @@ def calculate_adjustments(stationcode):
     
     else:
 
-        matplotlib.rcParams['text.usetex'] = False
-    #    rcParams['font.family'] = ['DejaVu Sans']
-    #    rcParams['font.sans-serif'] = ['Avant Garde']
-        rcParams['font.family'] = 'sans-serif'
-        rcParams['font.sans-serif'] = ['Avant Garde', 'Lucida Grande', 'Verdana', 'DejaVu Sans' ]
-        plt.rc('text',color='black')
-        plt.rc('lines',color='black')
-        plt.rc('patch',edgecolor='black')
-        plt.rc('grid',color='lightgray')
-        plt.rc('xtick',color='black')
-        plt.rc('ytick',color='black')
-        plt.rc('axes',labelcolor='black')
-        plt.rc('axes',facecolor='white')    
-        plt.rc('axes',edgecolor='black')
-        plt.rc('figure',facecolor='white')
-        plt.rc('figure',edgecolor='white')
-        plt.rc('savefig',edgecolor='white')
-        plt.rc('savefig',facecolor='white')
+        print('Using Seaborn graphics ... ')
+        import seaborn as sns; sns.set()
 
     # Calculate current time
 
