@@ -19,6 +19,8 @@ Python algorithm to calculate breakpoints in local expectation Kriging output CU
 * `cru_changepoint_detector_runnable.py` - command-line runnable to calculate changepoints and adjustments for a given station directly from the LEK output dataframe (see call syntax below)
 * `cru_changepoint_detector_detrender.py` - application of breakpoint detection and segmented OLS fitting to the HadCRUT5.0.1 global mean land surface air temperature series
 * `cru_changepoint_detector_global_stats.py` - global breakpoint and adjustment stats for GloSAT.p03
+* `cru_changepoint_detector_channel_islands.py` - test of breakpoint detection versus 5 documented changes
+* `cru_changepoint_detector_benchmark.py` - annual cycle + white noise + 4 a priori break types: level breaks (with and without seasonality) and linear trends (with and without seasonality)
 
 The first step is to clone the latest glosat-breakpoint-analysis code and step into the check out directory: 
 
@@ -33,7 +35,9 @@ The code was tested locally in a Python 3.8.11 virtual environment.
     $ python cru_changepoint_detector_wrapper.py
     $ python cru_changepoint_detector_runnable.py 037401
     $ python cru_changepoint_detector_detrender.py
-    $ python cru_changepoint_detector_global_stats.py
+    $ python cru_changepoint_detector_global_stats.py ( slow )
+    $ python cru_changepoint_detector_channel_islands.py
+    $ python cru_changepoint_detector_benchmark.py
     
 You will need to install the LTR driver with pip install linear-tree. Check other python library dependencies in each code header.
 The linear_tree_regression code takes as input the CSV station local expectation Kriging CUSUM timeseries output by the homogenisation code. Examples for testing in DATA/ and output breakpoints in decimal year format.
