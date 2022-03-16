@@ -1,11 +1,6 @@
 ![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/037401-cusum-curve-linear-tree-loop.png)
-![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/103810-cusum-curve-linear-tree-loop.png)
-![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/685880-cusum-curve-linear-tree-loop.png)
-![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/HadCRUT5-ltr-ols.png)
-![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/global-breakpoints-per-2-digit-stationcode-binary-flags.png)
-![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/global-breakpoints-per-2-digit-stationcode-n-stations.png)
-![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/global-stats-rmse.png)
-![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/global-stats-mae.png)
+![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/benchmark-1-breakpoints.png)
+![image](https://github.com/patternizer/glosat-breakpoint-analysis/blob/main/benchmark-3-breakpoints.png)
 
 # glosat-breakpoint-analysis
 

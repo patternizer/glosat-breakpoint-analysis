@@ -33,13 +33,25 @@ import filter_cru_dft as cru_filter # CRU DFT filter
 import cru_changepoint_detector as cru # CRU changepoint detector
 #------------------------------------------------------------------------------
 
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+# METHODS0
+#------------------------------------------------------------------------------
+
+def find_nearest(array, value):
+    
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx
+
+#------------------------------------------------------------------------------
 # SETTINGS
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 fontsize = 16 
 default_color = 'black'
 
+use_reproducible = True
+use_colocation = True
 use_smoothing = False
 plot_signal = True
 plot_cusum = True
@@ -51,12 +63,12 @@ noise_sd = 0.1      # degC
 min_segment = 240   # 2 decades
 nbreakpoints = 8   
 
-level_size = 0.5
+level_size = 0.2
 slope_size = 0.6 # degC / decade
 
-benchmark_type = 1 # steps ( no seasonality )
+#benchmark_type = 1 # steps ( no seasonality )
 #benchmark_type = 2 # steps + seasonality 
-#benchmark_type = 3 # linear trends ( no seasonality )
+benchmark_type = 3 # linear trends ( no seasonality )
 #benchmark_type = 4 # linear trends + seasonality
 
 #==============================================================================
@@ -65,7 +77,7 @@ benchmark_type = 1 # steps ( no seasonality )
         
 # SET: monthly time vector
 
-t_monthly = pd.date_range(start='1780', end='2021', freq='MS')[:-1]
+t_monthly = pd.date_range(start='1781', end='2021', freq='MS')[:-1]
 
 # GENERATE: annual cycle in monthly data 1780-2020
 
@@ -74,33 +86,33 @@ k = ( t_monthly.year[-1]-t_monthly.year[0]+1 ) # number of years
 tone = amplitude * np.sin( 2*np.pi*k*t/len(t) ) # annual cycle    
 seasonality = noise_sd * np.sin( 2*np.pi*k*t/len(t) ) # annual cycle    
 
-# GENERATE: white noise N( mean, std )
+# GENERATE: white noise N( mean, std ) and a priori breaks
 
-rng = np.random.default_rng(20211215) # seed for reproducibility
-noise = rng.normal( loc=noise_mean, scale=noise_sd, size=len(t))
-#noise = np.random.normal( loc=0.0, scale=0.1, size=len(t))
+allowed_levels = list( range(-20, 20+1) )
+allowed_slopes = list( range(-1, 1+1) )
+
+if use_reproducible == True:
+    
+    rng = np.random.default_rng(20211215) # seed for reproducibility
+    noise = rng.normal( loc=noise_mean, scale=noise_sd, size=len(t))
+    levels = [ rng.choice( allowed_levels ) * level_size for i in range( nbreakpoints + 1 ) ]
+    slope_sign = [ rng.choice( allowed_slopes ) * slope_size for i in range( nbreakpoints + 1 ) ]
+            
+else:
+    
+    noise = np.random.normal( loc=0.0, scale=0.1, size=len(t))
+    levels = [ random.choice(allowed_levels) * level_size for i in range( nbreakpoints + 1 ) ]
+    slope_sign = [ random.choice( allowed_slopes) * slope_size for i in range( nbreakpoints + 1 ) ]
+    
+idx = np.zeros( nbreakpoints )
+while ( np.diff(idx) < min_segment ).sum() > 0: idx = np.sort( np.random.randint( min_segment, len(t) - min_segment, size = nbreakpoints ) )
 
 if benchmark_type == 1:
     
     #------------------------------------------------------------------------------
     # GENERATE: benchmark Type I: steps ( no seasonality )
     #------------------------------------------------------------------------------
-    
-    #levels = np.random.randint(-3, 3, size = nbreakpoints + 1)
-    allowed_values = list( range(-2, 2+1) )
-    #allowed_values.remove(0)
-    #levels = [ random.choice(allowed_values) for i in range( nbreakpoints + 1 ) ]
-    #levels = [ random.choice(allowed_values) * level_size for i in range( nbreakpoints + 1 ) ]
-    levels = [ rng.choice(allowed_values) * level_size for i in range( nbreakpoints + 1 ) ]
-    
-    idx = np.zeros( nbreakpoints )
-    while ( np.diff(idx) < min_segment ).sum() > 0:
-    
-       idx = np.sort( np.random.randint( min_segment, len(t) - min_segment, size = nbreakpoints ) )
-
-    print('levels:', levels)
-    print('bp idx:', idx)
-    
+        
     benchmark = []
     x = np.arange( len(t) )
     y = np.ones( len(t) )
@@ -118,17 +130,6 @@ elif benchmark_type == 2:
     #------------------------------------------------------------------------------
     # GENERATE: benchmark Type II: steps + seasonality
     #------------------------------------------------------------------------------
-
-    allowed_values = list( range(-2, 2+1) )
-    levels = [ rng.choice(allowed_values) * level_size for i in range( nbreakpoints + 1 ) ]
-    
-    idx = np.zeros( nbreakpoints )
-    while ( np.diff(idx) < min_segment ).sum() > 0:
-    
-       idx = np.sort( np.random.randint( min_segment, len(t) - min_segment, size = nbreakpoints ) )
-
-    print('levels:', levels)
-    print('bp idx:', idx)
     
     benchmark = []
     x = np.arange( len(t) )
@@ -147,21 +148,7 @@ elif benchmark_type == 3:
     #------------------------------------------------------------------------------
     # GENERATE: benchmark Type III: linear trends ( no seasonality )
     #------------------------------------------------------------------------------
-
-    allowed_values = list( range(-2, 2+1) )
-    levels = [ rng.choice(allowed_values) * level_size for i in range( nbreakpoints + 1 ) ]
-    allowed_values = list( range(-1, 1+1) )
-#   allowed_values.remove(0)
-    slope_sign = [ rng.choice(allowed_values) * slope_size for i in range( nbreakpoints + 1 ) ]
-    
-    idx = np.zeros( nbreakpoints )
-    while ( np.diff(idx) < min_segment ).sum() > 0:
-    
-       idx = np.sort( np.random.randint( min_segment, len(t) - min_segment, size = nbreakpoints ) )
-
-    print('levels:', levels)
-    print('bp idx:', idx)
-    
+        
     benchmark = []
     x = np.arange( len(t) )
     y = np.ones( len(t) )
@@ -181,21 +168,7 @@ elif benchmark_type == 3:
     #------------------------------------------------------------------------------
 
 elif benchmark_type == 4:    
-
-    allowed_values = list( range(-2, 2+1) )
-    levels = [ rng.choice(allowed_values) * level_size for i in range( nbreakpoints + 1 ) ]
-    allowed_values = list( range(-1, 1+1) )
-#    allowed_values.remove(0)
-    slope_sign = [ rng.choice(allowed_values) * slope_size for i in range( nbreakpoints + 1 ) ]
     
-    idx = np.zeros( nbreakpoints )
-    while ( np.diff(idx) < min_segment ).sum() > 0:
-    
-       idx = np.sort( np.random.randint( min_segment, len(t) - min_segment, size = nbreakpoints ) )
-    
-    print('levels:', levels)
-    print('bp idx:', idx)
-
     benchmark = []
     x = np.arange( len(t) )
     y = np.ones( len(t) )
@@ -235,8 +208,6 @@ x = ( np.arange(len(y)) / len(y) )
 
 y_fit, y_fit_diff, y_fit_diff2, slopes, breakpoints, depth, r, R2adj = cru.changepoint_detector( x, y )
 
-print('bp detected:', breakpoints)
-
 if benchmark_type > 2:
 
     # breakpoint detection for linear trends
@@ -265,7 +236,7 @@ if benchmark_type > 2:
     ).fit(x[mask_linear].reshape(-1,1), slopes[mask_linear].reshape(-1,1))    
     y_fitB = lt.predict(x[mask_linear].reshape(-1,1))          
     
-    y_fitC, y_fit_diffC, y_fit_diff2C, slopesC, breakpointsC, depthC, rC, R2adjC = cru.changepoint_detector( x[mask_linear], y_fitB)
+    y_fitC, y_fit_diffC, y_fit_diff2C, slopesC, breakpointsC, depthC, rC, R2adjC = cru.changepoint_detector( x[mask_linear], y_fitB )
             
     #slopes_diff = np.array( [0.0] + list( np.diff( slopes, 1 ) ) )
     #slopes_diff[ np.abs( slopes_diff ) < 1e-6 ] = np.nan
@@ -278,7 +249,61 @@ if benchmark_type > 2:
     
     breakpoints = breakpointsC
      
-    print('bp detected (linear model):', breakpoints)
+#------------------------------------------------------------------------------
+# COMPUTE: breakpoint timing errors
+#------------------------------------------------------------------------------
+
+if use_colocation == True:
+    
+    keep = np.array( [np.nan] + list(np.diff( levels )) ) !=0
+    idx_a_priori = np.array( [np.nan] + list(idx) )[ keep ]
+    levels = np.array(levels)[keep]
+    idx = idx_a_priori[ np.isfinite(idx_a_priori) ].astype(int)
+    nbreakpoints = len(idx)    
+
+    bp = []
+    for i in range(len(idx)):
+        
+        value = idx[i]
+        loc = breakpoints[ find_nearest(breakpoints, value) ]
+        if np.abs( loc - value ) < 120:
+
+            bp.append( loc )
+
+        else:
+
+            bp.append( np.nan )            
+
+    # STORE: time errors
+    
+    errors = np.abs( idx - bp )
+    uncertainty = np.ceil( np.nanmean( errors ) ).astype(int)
+
+    # USE: ensemble estimates of uncertainty
+    
+    if benchmark_type < 3:
+        
+        uncertainty = np.ceil( 20.5 ).astype(int)
+        
+    else:
+        
+        uncertainty = np.ceil( 49.5 ).astype(int)
+    
+#------------------------------------------------------------------------------
+# COMPUTE: adjustment magnitude / timeseries s.d. 
+#------------------------------------------------------------------------------
+
+s = np.nanstd( ts )
+d = np.diff( levels )
+ratios = d / s
+
+print('levels:', levels)
+print('ratios:', ratios)
+print('errors:', errors)
+print('uncertainty:', uncertainty)
+print('bp idx ( a priori ):', idx)
+print('bp idx ( detected ):', breakpoints)
+print('bp idx ( nearest ):', bp)
 
 #==============================================================================
 # PLOTS
@@ -297,7 +322,7 @@ if plot_signal == True:
     plt.plot(t, noise, marker='*', ls='-', lw=1, color='teal', alpha=0.5, label='White noise: N(' + str(noise_mean) + ',' + str(noise_sd) + ')' )
     plt.plot(t, tone+noise, marker='.', ls='-', lw=0.5, color='purple', alpha=1, label='Baseline signal' )
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
-#    plt.xlim( pd.to_datetime( t_monthly[0], format='%Y-%m-%d' ), pd.to_datetime( t_monthly[120], format='%Y-%m-%d' ) )
+    plt.xlim( pd.to_datetime( t_monthly[0], format='%Y-%m-%d' ), pd.to_datetime( t_monthly[120], format='%Y-%m-%d' ) )
     plt.tick_params(labelsize=fontsize)  
     plt.xlabel('Year', fontsize=fontsize)
     plt.ylabel(r'Temperature anomaly, $^{\circ}$C', fontsize=fontsize)
@@ -319,7 +344,7 @@ if plot_cusum == True:
     plt.plot( t, y, color='blue', ls='-', lw=3, label='CUSUM')
     plt.plot( t, y_fit, color='red', ls='-', lw=2, label='LTR fit')
     plt.fill_between( t, slopes, 0, color='lightblue', alpha=0.5, label='CUSUM/decade' )    
-#    plt.scatter( t, slopes_diff, color='red', alpha=0.5, label='CUSUM diff' )    
+    #plt.scatter( t, slopes_diff, color='red', alpha=0.5, label='CUSUM diff' )    
     for i in range(len(t[(y_fit_diff2>0).ravel()])):
         if i==0: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
         else: plt.axvline( t[(y_fit_diff2>0).ravel()][i], ls='-', lw=1, color=default_color, alpha=0.2) 
@@ -328,7 +353,7 @@ if plot_cusum == True:
         else: plt.axvline( t[breakpoints[i]], ls='dashed', lw=3, color=default_color)    
     for i in range(nbreakpoints):
         if i==0:
-            plt.axvline( t[ idx[i] ], ls='dashed', lw=2, color='blue', label='A priori')
+            plt.axvline( t[ idx[i] ], ls='dashed', lw=2, color='blue', label='A Priori')
         else:
             plt.axvline( t[ idx[i]] , ls='dashed', lw=2, color='blue')                    
     plt.tick_params(labelsize=fontsize)    
@@ -351,16 +376,19 @@ if plot_benchmark == True:
     fig, ax = plt.subplots(figsize=(15,10))
     plt.plot(t, ts, marker='.', ls='-', lw=0.5, color='purple', alpha=0.2, label='Benchmark series')
     plt.plot(t, benchmark, ls='-', lw=3, color='purple', alpha=1, label='Benchmark adjustments')
+    ylimits = plt.ylim()
     for i in range(len(breakpoints)):
         if i==0:
             plt.axvline( t[breakpoints[i]], ls='dashed', lw=3, color='black', label='Breakpoint')
+            plt.fill_betweenx( ylimits, t[ breakpoints[i] - uncertainty ], t[ breakpoints[i] + uncertainty ], facecolor='grey', alpha=0.5, label=r'$\sigma$=' + str(uncertainty) + ' months')    
         else:
             plt.axvline( t[breakpoints[i]], ls='dashed', lw=3, color='black')    
+            plt.fill_betweenx( ylimits, t[ breakpoints[i] - uncertainty ], t[ breakpoints[i] + uncertainty ], facecolor='grey', alpha=0.5)                                        
     for i in range(nbreakpoints):
         if i==0:
             plt.axvline( t[ idx[i] ], ls='-', lw=1, color='black', label='A priori')
         else:
-            plt.axvline( t[ idx[i]] , ls='-', lw=1, color='black')    
+            plt.axvline( t[ idx[i]], ls='-', lw=1, color='black')    
     plt.tick_params(labelsize=fontsize)  
     plt.xlabel('Year', fontsize=fontsize)
     plt.ylabel(r'Temperature anomaly, $^{\circ}$C', fontsize=fontsize)

@@ -190,7 +190,7 @@ if plot_difference == True:
     figstr = 'channel-islands-guernsey' + '-' + 'difference.png'   
                  
     fig, ax = plt.subplots(figsize=(15,10))
-    plt.plot(t, dg['O-E'], marker='o', ls='-', lw=1, color='lightblue', alpha=0.7, label='O-E')
+#    plt.plot(t, dg['O-E'], marker='o', ls='-', lw=1, color='lightblue', alpha=0.7, label='O-E')
     plt.plot(t, dg['G-E'], marker='o', ls='-', lw=1, color='pink', alpha=0.7, label='G-E')
     for i in range(len(breakpointsB)):
         if i==0:
@@ -198,11 +198,11 @@ if plot_difference == True:
         else:
             plt.axvline( t[breakpointsB[i]], ls='-', lw=3, color='red')    
 
-    for i in range(len(breakpointsA)):
-        if i==0:
-            plt.axvline( t[breakpointsA[i]], ls='-', lw=2, color='blue', label='Breakpoint (O-E)')
-        else:
-            plt.axvline( t[breakpointsA[i]], ls='-', lw=2, color='blue')    
+#    for i in range(len(breakpointsA)):
+#        if i==0:
+#            plt.axvline( t[breakpointsA[i]], ls='-', lw=2, color='blue', label='Breakpoint (O-E)')
+#        else:
+#            plt.axvline( t[breakpointsA[i]], ls='-', lw=2, color='blue')    
 
     for i in range(len(breakpointsC)):
         if i==0:

@@ -41,7 +41,7 @@ stationcode = 'HadCRUT5'
 
 fontsize = 16 
 use_dark_theme = False
-use_pre_industrial = False
+use_pre_industrial = True
 
 plot_cusum = True
 plot_adjustments = True
@@ -201,9 +201,9 @@ if plot_cusum == True:
 	plt.plot( t, y_fit, color='red', ls='-', lw=2, label='LTR fit')
 	plt.fill_between( t, slopes, 0, color='lightblue', alpha=0.5, label='CUSUM/decade' )    
 	ylimits = plt.ylim()    
-	for i in range(len(t[(y_fit_diff2>0).ravel()])):
-		if i==0: plt.axvline( t[(y_fit_diff2>0).ravel()].values[i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
-		else: plt.axvline( t[(y_fit_diff2>0).ravel()].values[i], ls='-', lw=1, color=default_color, alpha=0.2) 
+#	for i in range(len(t[(y_fit_diff2>0).ravel()])):
+#		if i==0: plt.axvline( t[(y_fit_diff2>0).ravel()].values[i], ls='-', lw=1, color=default_color, alpha=0.2, label='LTR boundary') 
+#	    else: plt.axvline( t[(y_fit_diff2>0).ravel()].values[i], ls='-', lw=1, color=default_color, alpha=0.2) 
 	for i in range(len(breakpoints)):
 		if i==0: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, label='Breakpoint')
 		else: plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color)    
@@ -235,15 +235,15 @@ if plot_adjustments == True:
 
     fig, ax = plt.subplots(figsize=(15,10))
     plt.plot(t, a, marker='.', mfc='blue', ls='-', lw=1, color='blue', alpha=0.5, zorder=0, label='O')
-    plt.plot(t, a + y_means, marker='.', mfc='lightblue', ls='-', lw=1, color='lightblue', alpha=0.5, zorder=0, label='O (detrended)')    
-    for i in range(len(t[(y_fit_diff2>0).ravel()])):
-        if i==0:
-            plt.axvline( pd.to_datetime( t[(y_fit_diff2>0).ravel()].values[i] ), ls='-', lw=1, color=default_color, alpha=0.2, zorder=1, label='LTR boundary') 
-        else:
-            plt.axvline( pd.to_datetime( t[(y_fit_diff2>0).ravel()].values[i] ), ls='-', lw=1, color=default_color, zorder=1, alpha=0.2)        
+#    plt.plot(t, a + y_means, marker='.', mfc='lightblue', ls='-', lw=1, color='lightblue', alpha=0.5, zorder=0, label='O (detrended)')    
+#    for i in range(len(t[(y_fit_diff2>0).ravel()])):
+#        if i==0:
+#            plt.axvline( pd.to_datetime( t[(y_fit_diff2>0).ravel()].values[i] ), ls='-', lw=1, color=default_color, alpha=0.2, zorder=1, label='LTR boundary') 
+#        else:
+#            plt.axvline( pd.to_datetime( t[(y_fit_diff2>0).ravel()].values[i] ), ls='-', lw=1, color=default_color, zorder=1, alpha=0.2)        
     for i in range(len(breakpoints)):
         if i==0:
-            plt.plot( t[0:breakpoints[i]], np.tile( -np.nanmean(a[0:breakpoints[i]]), breakpoints[i] ), ls='-', lw=3, color='gold', zorder=2 )
+ #           plt.plot( t[0:breakpoints[i]], np.tile( -np.nanmean(a[0:breakpoints[i]]), breakpoints[i] ), ls='-', lw=3, color='gold', zorder=2 )
             plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, zorder=5, label='Breakpoint')
 
             # FIT: OLS to segment
@@ -260,7 +260,7 @@ if plot_adjustments == True:
 
         else:
             plt.axvline( t[breakpoints[i]], ls='dashed', lw=2, color=default_color, zorder=5)    
-            plt.plot( t[breakpoints[i-1]:breakpoints[i]], np.tile( -np.nanmean(a[breakpoints[i-1]:breakpoints[i]]), breakpoints[i]-breakpoints[i-1] ), ls='-', lw=3, color='gold', zorder=3 )
+#            plt.plot( t[breakpoints[i-1]:breakpoints[i]], np.tile( -np.nanmean(a[breakpoints[i-1]:breakpoints[i]]), breakpoints[i]-breakpoints[i-1] ), ls='-', lw=3, color='gold', zorder=3 )
 
             # FIT: OLS to segment
             
@@ -275,7 +275,7 @@ if plot_adjustments == True:
             plt.scatter(T, ypred, marker='.', fc='red', ls='-', lw=1, color='red', alpha=0.5, zorder=3 )    
 
         if i==len(breakpoints)-1:
-            plt.plot( t[breakpoints[i]:], np.tile( -np.nanmean(a[breakpoints[i]:]), len(t)-breakpoints[i] ), ls='-', lw=3, color='gold', zorder=3, label='Adjustment')                
+#            plt.plot( t[breakpoints[i]:], np.tile( -np.nanmean(a[breakpoints[i]:]), len(t)-breakpoints[i] ), ls='-', lw=3, color='gold', zorder=3, label='Adjustment')                
             
             # FIT: OLS to segment
 
