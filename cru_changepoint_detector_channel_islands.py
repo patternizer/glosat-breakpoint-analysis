@@ -4,9 +4,8 @@
 #------------------------------------------------------------------------------
 # PROGRAM: cru_changepoint_detector_channel_islands.py
 #------------------------------------------------------------------------------
-#
-# Version 0.1
-# 13 December, 2021
+# Version 0.2
+# 5 June, 2022
 # Michael Taylor
 # https://patternizer.github.io
 # patternizer AT gmail DOT com
@@ -59,15 +58,15 @@ df_compressed = df_temp[ df_temp['stationcode'] == stationcode ].sort_values(by=
 #       's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11', 's12'],
 #      dtype='object')
     
-df_yearly = pd.DataFrame({'year': np.arange( 1780, 2021 )}) # 1780-2020 inclusive
+df_yearly = pd.DataFrame({'year': np.arange( 1781, 2022 )}) # 1780-2020 inclusive
 df = df_yearly.merge(df_compressed, how='left', on='year')
 dt = df.groupby('year').mean().iloc[:,0:12]
 dn_array = np.array( df.groupby('year').mean().iloc[:,19:31] )
 dn = dt.copy()
 dn.iloc[:,0:] = dn_array
 da = (dt - dn).reset_index()
-de = (df.groupby('year').mean().iloc[:,31:43]).reset_index()
-ds = (df.groupby('year').mean().iloc[:,43:55]).reset_index()        
+de = (df.groupby('year').mean().iloc[:,43:55]).reset_index()
+ds = (df.groupby('year').mean().iloc[:,55:67]).reset_index()        
 dt = dt.reset_index()
 
 # TRIM: to start of Pandas datetime range
@@ -166,7 +165,7 @@ if plot_timeseries == True:
     fig, ax = plt.subplots(figsize=(15,10))
 
     plt.plot( t, dg.G, marker='o', ls='-', lw=1, color='orange', alpha=1, label='WeatherRescue')
-    plt.plot( t, dg.O, marker='o', ls='-', lw=1, color='blue', alpha=0.3, label='GloSAT.p03')
+    plt.plot( t, dg.O, marker='o', ls='-', lw=1, color='blue', alpha=0.3, label='GloSAT.p04')
     plt.plot( t, dg.E, marker='o', ls='-', lw=1, color='red', alpha=0.3, label='LEK')
     plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
     ax.xaxis.grid(visible=None, which='major', color='none', linestyle='-')
@@ -190,7 +189,7 @@ if plot_difference == True:
     figstr = 'channel-islands-guernsey' + '-' + 'difference.png'   
                  
     fig, ax = plt.subplots(figsize=(15,10))
-#    plt.plot(t, dg['O-E'], marker='o', ls='-', lw=1, color='lightblue', alpha=0.7, label='O-E')
+    plt.plot(t, dg['O-E'], marker='o', ls='-', lw=1, color='lightblue', alpha=0.7, label='O-E')
     plt.plot(t, dg['G-E'], marker='o', ls='-', lw=1, color='pink', alpha=0.7, label='G-E')
     for i in range(len(breakpointsB)):
         if i==0:
@@ -198,11 +197,11 @@ if plot_difference == True:
         else:
             plt.axvline( t[breakpointsB[i]], ls='-', lw=3, color='red')    
 
-#    for i in range(len(breakpointsA)):
-#        if i==0:
-#            plt.axvline( t[breakpointsA[i]], ls='-', lw=2, color='blue', label='Breakpoint (O-E)')
-#        else:
-#            plt.axvline( t[breakpointsA[i]], ls='-', lw=2, color='blue')    
+    for i in range(len(breakpointsA)):
+        if i==0:
+            plt.axvline( t[breakpointsA[i]], ls='-', lw=2, color='blue', label='Breakpoint (O-E)')
+        else:
+            plt.axvline( t[breakpointsA[i]], ls='-', lw=2, color='blue')    
 
     for i in range(len(breakpointsC)):
         if i==0:
