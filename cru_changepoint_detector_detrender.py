@@ -46,6 +46,8 @@ use_pre_industrial = True
 plot_cusum = True
 plot_adjustments = True
 
+filename_hadcrut5 = 'DATA/HadCRUT.5.0.1.0.analysis.summary_series.global.monthly.nc'
+
 #----------------------------------------------------------------------------
 # DARK THEME
 #----------------------------------------------------------------------------
@@ -105,7 +107,7 @@ def linear_regression_ols(x,y):
 # LOAD: CUSUM timeseries from local expectation Kriging (LEK) analysis
 #------------------------------------------------------------------------------
 
-ds = xr.open_dataset('DATA/HadCRUT.5.0.1.0.analysis.summary_series.global.monthly.nc', decode_cf=True)
+ds = xr.open_dataset( filename_hadcrut5, decode_cf=True )
 t_monthly = pd.date_range(start=str(ds.time.dt.year[0].values), periods=len(ds.time), freq='M')
 if use_pre_industrial == False:
     ts_monthly = ds.tas_mean.values
