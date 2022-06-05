@@ -34,7 +34,7 @@ import cru_changepoint_detector as cru # CRU changepoint detector
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
-# METHODS0
+# METHODS
 #------------------------------------------------------------------------------
 
 def find_nearest(array, value):
@@ -50,7 +50,7 @@ def find_nearest(array, value):
 fontsize = 16 
 default_color = 'black'
 
-use_reproducible = True
+use_reproducible = False
 use_colocation = True
 use_smoothing = False
 plot_signal = True
@@ -66,9 +66,9 @@ nbreakpoints = 8
 level_size = 0.2
 slope_size = 0.6 # degC / decade
 
-#benchmark_type = 1 # steps ( no seasonality )
+benchmark_type = 1 # steps ( no seasonality )
 #benchmark_type = 2 # steps + seasonality 
-benchmark_type = 3 # linear trends ( no seasonality )
+#benchmark_type = 3 # linear trends ( no seasonality )
 #benchmark_type = 4 # linear trends + seasonality
 
 #==============================================================================
@@ -79,7 +79,7 @@ benchmark_type = 3 # linear trends ( no seasonality )
 
 t_monthly = pd.date_range(start='1781', end='2021', freq='MS')[:-1]
 
-# GENERATE: annual cycle in monthly data 1780-2020
+# GENERATE: annual cycle in monthly data 1781-2021
 
 t = np.arange( len(t_monthly) )  # index of monthly datetimes
 k = ( t_monthly.year[-1]-t_monthly.year[0]+1 ) # number of years
@@ -222,11 +222,8 @@ if benchmark_type > 2:
     from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
     
     max_depth = 6                        
-    min_separation = 30                         # [30,360] NB: 120 = 1 decade
-    max_bins = int( min_separation/3 ) 			# 1/3 of min_samples_leaf in range[10,120]
-    if max_bins < 10: max_bins = 10
-    if max_bins > 120: max_bins = 120
-    min_samples_leaf = 3                        # > 2 
+    max_bins = 30          # range[10,120]
+    min_samples_leaf = 3   # > 2 
     
     lt = LinearTreeRegressor(
         base_estimator = LinearRegression(),
