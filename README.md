@@ -16,6 +16,10 @@ Python algorithm to calculate breakpoints in local expectation Kriging output CU
 * `cru_changepoint_detector_global_stats.py` - global breakpoint and adjustment stats for GloSAT.p03
 * `cru_changepoint_detector_channel_islands.py` - test of breakpoint detection versus 5 documented changes
 * `cru_changepoint_detector_benchmark.py` - annual cycle + white noise + 4 a priori break types: level breaks (with and without seasonality) and linear trends (with and without seasonality)
+* `cru_changepoint_detector_benchmark_monte_carlo.py` - 1000 simulation benchmark estimation of breakpoint timing uncertainty
+* `compare_breakpoints.py` - 3-way comparison of meteadata breakpoints and those calculated with cru_changepoint_detector.py and ruptures.py
+* `compare_breakpoints_n_random.py` - n-sample run of the 3-way comparison of meteadata breakpoints and those calculated with cru_changepoint_detector.py and ruptures.py
+
 
 The first step is to clone the latest glosat-breakpoint-analysis code and step into the check out directory: 
 
