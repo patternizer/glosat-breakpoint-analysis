@@ -66,6 +66,8 @@ plot_seasonal = True
 
 nfft = 10                     # decadal smoothing
  
+filename_lek = 'DATA/df_temp_expect_reduced.pkl'
+
 #----------------------------------------------------------------------------
 # DARK THEME
 #----------------------------------------------------------------------------
@@ -112,34 +114,12 @@ def smooth_fft(x, span):
     x_filtered = y_lo
 
     return x_filtered
-
-def merge_fix_cols(df1,df2,var):
-    '''
-    df1: full time range dataframe (container)
-    df2: observation time range
-    df_merged: merge of observations into container
-    var: 'time' or name of datetime column
-    '''
-    
-    df_merged = pd.merge( df1, df2, how='left', left_on=var, right_on=var)    
-#   df_merged = pd.merge( df1, df2, how='left', on=var)    
-#   df_merged = df1.merge(df2, how='left', on=var)
-    
-    for col in df_merged:
-        if col.endswith('_y'):
-            df_merged.rename(columns = lambda col:col.rstrip('_y'),inplace=True)
-        elif col.endswith('_x'):
-            to_drop = [col for col in df_merged if col.endswith('_x')]
-            df_merged.drop( to_drop, axis=1, inplace=True)
-        else:
-            pass
-    return df_merged
     
 #------------------------------------------------------------------------------
 # LOAD: CUSUM timeseries from local expectation Kriging (LEK) analysis
 #------------------------------------------------------------------------------
          
-df_temp = pd.read_pickle('DATA/df_temp_expect_reduced.pkl', compression='bz2')
+df_temp = pd.read_pickle( filename_lek, compression='bz2' )
 df_compressed = df_temp[ df_temp['stationcode'] == stationcode ].sort_values(by='year').reset_index(drop=True).dropna()
 
 #['year', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12',
@@ -158,8 +138,8 @@ dn_array = np.array( df.groupby('year').mean().iloc[:,19:31] )
 dn = dt.copy()
 dn.iloc[:,0:] = dn_array
 da = (dt - dn).reset_index()
-de = (df.groupby('year').mean().iloc[:,31:43]).reset_index()
-ds = (df.groupby('year').mean().iloc[:,43:55]).reset_index()        
+de = (df.groupby('year').mean().iloc[:,43:55]).reset_index()
+ds = (df.groupby('year').mean().iloc[:,55:67]).reset_index()        
 
 # TRIM: to start of Pandas datetime range
         
