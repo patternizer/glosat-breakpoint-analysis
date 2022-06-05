@@ -5,19 +5,19 @@ from sklearn.linear_model import *
 import statsmodels.api as sm
 from lineartree import LinearTreeClassifier, LinearTreeRegressor
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
-                
+              
 def changepoint_detector(x,y):
     '''
-    ------------------------------------------------------------------------------
+    ---------------------------------------------------------------------------
     PROGRAM: cru_changepoint_detector.py
-    ------------------------------------------------------------------------------
+    ---------------------------------------------------------------------------
     Version 0.3
     11 November, 2021
     Michael Taylor
     https://patternizer.github.io
     patternizer AT gmail DOT com
     michael DOT a DOT taylor AT uea DOT ac DOT uk
-    ------------------------------------------------------------------------------
+    ---------------------------------------------------------------------------
     Uses linear tree regression fit to CUSUM series to detect changepoints.
     
     y		 	: timeseries
@@ -25,18 +25,18 @@ def changepoint_detector(x,y):
     
     RETURNS:
     
-    y_fit 				: linear tree regression fit at dervied optimal tree depth    
+    y_fit 			: linear tree regression fit at dervied optimal tree depth    
     y_fit_diff1 		: 1st difference of y_fit
     y_fit_diff2 		: 2nd difference of y_fit
-    slopes				: vector of LTR segment slope
+    slopes			: vector of LTR segment slope
     breakpoints 		: vector of breakpoints detected
-    max_depth_optimum 	: optimal tree depth derived from goodness of fit and correlation
-    r					: vector of Pearson correlation coefficients as a function of tree depth
-    R2adj				: vector of adjusted R^2 as a function of tree depth    
-    ------------------------------------------------------------------------------
-    CALL SYNTAX: y_fit, y_fit_diff1, y_fit_diff2, slopes, breakpoints, max_depth_optimum, r, R2adj = changepoint_detector(x, y)
-    
-    ------------------------------------------------------------------------------
+    max_depth_optimum 		: optimal tree depth derived from g.o.f. and correlation
+    r				: vector of Pearson corr. coeffs. as a fn. of tree depth
+    R2adj			: vector of adjusted R^2 as a function of tree depth    
+    ---------------------------------------------------------------------------
+    CALL SYNTAX: 
+    y_fit, y_fit_diff1, y_fit_diff2, slopes, breakpoints, max_depth_optimum, r, R2adj = changepoint_detector(x, y)    
+    ---------------------------------------------------------------------------
     '''
 
     #--------------------------------------------------------------------------
@@ -45,10 +45,7 @@ def changepoint_detector(x,y):
 
     def linear_regression_ols(x,y):
     
-        regr = linear_model.LinearRegression()
-        # regr = TheilSenRegressor(random_state=42)
-        # regr = RANSACRegressor(random_state=42)
-    
+        regr = linear_model.LinearRegression()    
         X = x.reshape(len(x),1)
         t = np.linspace(X.min(),X.max(),len(X)) # dummy var spanning [xmin,xmax]        
         regr.fit(X, y)
@@ -71,17 +68,16 @@ def changepoint_detector(x,y):
     # SETTINGS (pre-optimised for monthly timeseries)
     #--------------------------------------------------------------------------
 
-    max_depth = 9 		                        # in range [1,20]
-    min_separation = 120                        # 120 = 1 decade
-    max_bins = int( min_separation/3 ) 			# 1/3 of min_samples_leaf in range[10,120]
+    max_depth = 9 		        # in range [1,20]
+    min_separation = 120               # 120 = 1 decade at monthly timescale
+    max_bins = int( min_separation/3 ) # 1/3 of min_separation in range [10,120]
     if max_bins < 10: max_bins = 10
     if max_bins > 120: max_bins = 120
     min_samples_leaf = 10
 #   min_slope_change = 3 * (120/min_separation) # units: CUSUM / decade
     min_correlation_change = 0.001 
-
-    use_optimal_tree_depth = False
-
+    use_optimal_tree_depth = True
+	
     #--------------------------------------------------------------------------
     # FORMAT: reshape data
     #--------------------------------------------------------------------------
@@ -126,11 +122,11 @@ def changepoint_detector(x,y):
     r_diff = np.array( [np.nan] + list(np.diff(r)) )
 
     if use_optimal_tree_depth == True:
-
-        max_depth_optimum = np.arange(1,max_depth+1)[ r_diff < min_correlation_change ][0] - 1
-
-    else:
-        
+        if np.isfinite(r_diff).sum() > 0:
+            max_depth_optimum = np.arange(1,max_depth+1)[ r_diff < min_correlation_change ][0] - 1
+        else:
+            max_depth_optimum = 9
+    else:        
         max_depth_optimum = 9                        
 
     #--------------------------------------------------------------------------
@@ -145,7 +141,7 @@ def changepoint_detector(x,y):
     ).fit(x_obs, y_obs)    
     y_fit = lt.predict(x_obs)            
     y_fit_diff = [0.0] + list(np.diff(y_fit))        
-   
+  
     #--------------------------------------------------------------------------
     # BREAKPOINT: detection ( using slopes )
     #--------------------------------------------------------------------------
@@ -169,16 +165,18 @@ def changepoint_detector(x,y):
             else:            
                 slopes[i] = slopes_all[i]                
     slopes_diff = np.array( [0.0] + list(np.diff(slopes)) )
-#   breakpoints_all = np.arange(len(y_obs))[ np.abs(slopes_diff) >= min_slope_change ] - 1        
+
+    # breakpoints_all = np.arange(len(y_obs))[ np.abs(slopes_diff) >= min_slope_change ] - 1        
     breakpoints_all = np.arange(len(y_obs))[ np.abs(slopes_diff) >= ( np.nanmean(slopes_diff) + 6.0 * np.nanstd(slopes_diff) ) ] - 1        
+
     if len(breakpoints_all) > 0:
         breakpoints_diff = np.array( [breakpoints_all[0]] + list( np.diff(breakpoints_all) ) )
-        breakpoints = breakpoints_all[ breakpoints_diff >= min_separation ] 
+        breakpoints = breakpoints_all[ (breakpoints_diff >= min_separation) ]
     else:
-        breakpoints = []
-
-    idx = np.arange( len(y) )                
-    y[y==0] = np.nan
+        breakpoints = []    
+        
+    if use_optimal_tree_depth == True:
+        print('max_depth=', max_depth_optimum, ': breakpoints:', breakpoints)
             
     return y_fit, y_fit_diff1, y_fit_diff2, slopes, breakpoints, max_depth_optimum, r, R2adj           
 #------------------------------------------------------------------------------
