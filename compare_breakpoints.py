@@ -23,6 +23,7 @@ from netCDF4 import Dataset, num2date, date2num
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
+import seaborn as sns; sns.set()
 
 # Stats libraries:
 import ruptures
@@ -48,10 +49,18 @@ import cru_changepoint_detector as cru # CRU changepoint detector
 stationcode = '042110'     # Upernavik
 
 fontsize = 16 
-use_dark_theme = True
+use_dark_theme = False
 use_smoothing = True
+use_cru = False 
  
-filename_lek = 'DATA/df_temp_expect_reduced.pkl'
+use_glosat_start = True # ( default = True ) False --> use edge of Pandas = 1678
+
+if use_glosat_start == True:
+    tstart, tend = 1781, 2022
+else:
+    tstart, tend = 1678, 2022
+ 
+filename_lek = 'DATA/df_temp_expect.pkl'
 filename_emily = 'DATA/df_breaks.pkl'
 
 min_separation = 120 # months
@@ -156,7 +165,7 @@ df_emily['stationcode'] = [ str(df_emily['stationcode'].iloc[i]).zfill(6) for i 
 
 # TRIM: to 1781
 
-df_emily = df_emily[ (df_emily.year >= 1781) ]
+# df_emily = df_emily[ (df_emily.year >= 1781) ]
 
 #------------------------------------------------------------------------------
 # LOAD: CUSUM timeseries from local expectation Kriging (LEK) analysis
@@ -164,13 +173,17 @@ df_emily = df_emily[ (df_emily.year >= 1781) ]
 
 df_temp = pd.read_pickle( filename_lek, compression='bz2')
 df_compressed = df_temp[ df_temp['stationcode'] == stationcode ].sort_values(by='year').reset_index(drop=True).dropna()
+
+stationname = df_compressed.stationname.unique()[0]
     
-df_yearly = pd.DataFrame({'year': np.arange( 1781, 2022 )}) # 1781-2021 inclusive
+df_yearly = pd.DataFrame({'year': np.arange( tstart, tend )})
 df = df_yearly.merge(df_compressed, how='left', on='year')
 dt = df.groupby('year').mean().iloc[:,0:12]
+
 dn_array = np.array( df.groupby('year').mean().iloc[:,19:31] )
 dn = dt.copy()
 dn.iloc[:,0:] = dn_array
+
 da = (dt - dn).reset_index()
 de = (df.groupby('year').mean().iloc[:,43:55]).reset_index()
 ds = (df.groupby('year').mean().iloc[:,55:67]).reset_index()        
@@ -266,41 +279,46 @@ else:
 #------------------------------------------------------------------------------
 
 figstr = stationcode + '-' + 'compare_breakpoints.png'       
+titlestr = stationcode + ': ' + stationname
              
 fig, ax = plt.subplots(figsize=(15,10))
 #plt.fill_between(t, e-s, e+s, color='lightgrey', alpha=0.5, label='uncertainty')
 #plt.scatter(t, a, marker='o', fc='blue', ls='-', lw=1, color='blue', alpha=0.5, label='O')
 #plt.scatter(t, e, marker='o', fc='red', ls='-', lw=1, color='red', alpha=0.5, label='E')         
-plt.scatter(t, d, marker='o', fc='white', ls='-', lw=1, color='grey', alpha=0.2, label='O-E')         
+plt.scatter(t, d, marker='o', fc='grey', ls='-', lw=1, color='grey', alpha=0.2, label='O-E')         
 
-for i in range(len(breakpoints)): 
-    if i == 0: 
-        plt.axvline( t[ breakpoints[i] ], ls='-', lw=3, color='blue', alpha=1, label='cru')                    
-    else:
-        plt.axvline( t[ breakpoints[i] ], ls='-', lw=3, color='blue', alpha=1)     
+if use_cru == True:
+	
+	for i in range(len(breakpoints)): 
+		if i == 0: 
+			plt.axvline( t[ breakpoints[i] ], ls='-', lw=3, color='blue', alpha=1, label='cru')                    
+		else:
+			plt.axvline( t[ breakpoints[i] ], ls='-', lw=3, color='blue', alpha=1)     
+
 for i in range(len(breakpoints_ruptures)): 
     if i == 0: 
-        plt.axvline( t[ breakpoints_ruptures[i] ], ls='-', lw=2, color='red', alpha=1, label='ruptures')                    
+        plt.axvline( t[ breakpoints_ruptures[i] ], ls='-', lw=2.5, color='red', alpha=1, label='ruptures')                    
     else:
-        plt.axvline( t[ breakpoints_ruptures[i] ], ls='-', lw=2, color='red', alpha=1)                    
+        plt.axvline( t[ breakpoints_ruptures[i] ], ls='-', lw=2.5, color='red', alpha=1)                    
 for i in range(len(breakpoints_emily)): 
     if i == 0: 
-        plt.axvline( t[ breakpoints_emily[i] ], ls='-', lw=1, color='yellow', alpha=1, label='emily')                    
+        plt.axvline( t[ breakpoints_emily[i] ], ls='-', lw=2, color='teal', alpha=1, label='emily')                    
     else:
-        plt.axvline( t[ breakpoints_emily[i] ], ls='-', lw=1, color='yellow', alpha=1)     
+        plt.axvline( t[ breakpoints_emily[i] ], ls='-', lw=2, color='teal', alpha=1)     
                
 plt.axhline( y=0, ls='-', lw=1, color=default_color, alpha=0.2)                    
-plt.xlim(t[0],t[-1])
-ax.xaxis.grid(visible=None, which='major', color='none', linestyle='-')
-ax.yaxis.grid(visible=None, which='major', color='none', linestyle='-')
-plt.grid(visible=None)
+#plt.xlim(t[0],t[-1])
+#ax.xaxis.grid(visible=None, which='major', color='none', linestyle='-')
+#ax.yaxis.grid(visible=None, which='major', color='none', linestyle='-')
+#plt.grid(visible=None)
 plt.tick_params(labelsize=fontsize)  
 plt.xlabel('Year', fontsize=fontsize)
 plt.ylabel(r'Temperature anomaly (from 1961-1990) difference, $^{\circ}$C', fontsize=fontsize)
-plt.title( stationcode, color=default_color, fontsize=fontsize)           
-fig.legend(loc='lower center', ncol=6, markerscale=1, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)   
-fig.subplots_adjust(left=0.1, bottom=0.15, right=None, top=None, wspace=None, hspace=None)       
-plt.savefig(figstr, dpi=300)
+plt.title( titlestr, color=default_color, fontsize=fontsize)           
+plt.legend(loc='upper left', facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)   
+#fig.legend(loc='upper left', ncol=6, markerscale=1, facecolor='lightgrey', framealpha=0.5, fontsize=fontsize)   
+#fig.subplots_adjust(left=0.1, bottom=0.15, right=None, top=None, wspace=None, hspace=None)       
+plt.savefig(figstr, dpi=300, bbox_inches='tight')
 plt.close('all')       
        
 #------------------------------------------------------------------------------
